@@ -1,2 +1,4 @@
 bin/
 obj/
+cms_output/obj/Debug/*
+cms_output/bin/Debug/*

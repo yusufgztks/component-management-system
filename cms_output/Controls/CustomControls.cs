@@ -17,6 +17,9 @@ namespace CMS.Controls
 
         private bool _hovered;
 
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public Color CustomBgColor { get; set; } = Color.Empty;
+
         public ModernButton()
         {
             FlatStyle = FlatStyle.Flat;
@@ -26,6 +29,8 @@ namespace CMS.Controls
             Cursor = Cursors.Hand;
         }
 
+        protected override bool ShowFocusCues => false;
+
         protected override void OnMouseEnter(EventArgs e) { _hovered = true; Invalidate(); base.OnMouseEnter(e); }
         protected override void OnMouseLeave(EventArgs e) { _hovered = false; Invalidate(); base.OnMouseLeave(e); }
 
@@ -33,32 +38,50 @@ namespace CMS.Controls
         {
             var g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            var r = new Rectangle(0, 0, Width - 1, Height - 1);
-            var path = RoundedRect(r, 6);
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
 
-            Color bg; Color fg;
+            Color baseBg = CustomBgColor;
+            if (baseBg == Color.Empty)
+            {
+                baseBg = Theme.BgMain;
+                Control? p = this.Parent;
+                while (p != null) { if (p.BackColor != Color.Transparent) { baseBg = p.BackColor; break; } p = p.Parent; }
+            }
+            g.Clear(baseBg);
+
+            var r = new Rectangle(0, 0, Width - 1, Height - 1);
+            var path = RoundedRect(r, 16);
+
+            Color bg1, bg2; Color fg;
             switch (Style)
             {
                 case BtnStyle.Success:
-                    bg = _hovered ? Color.FromArgb(22, 163, 120) : Theme.AccentGreen;
+                    bg1 = _hovered ? Theme.AccentHover : Theme.Accent;
+                    bg2 = _hovered ? Color.FromArgb(0, 140, 134) : Color.FromArgb(0, 125, 120);
                     fg = Color.White; break;
                 case BtnStyle.Danger:
-                    bg = _hovered ? Theme.DangerHover : Theme.Danger;
+                    bg1 = _hovered ? Theme.DangerHover : Theme.Danger;
+                    bg2 = _hovered ? Color.FromArgb(200, 20,  20) : Color.FromArgb(210, 40,  40);
                     fg = Color.White; break;
                 case BtnStyle.Secondary:
-                    bg = _hovered ? Theme.BgSurface3 : Theme.BgSurface2;
-                    fg = Theme.TextSecondary; break;
+                    bg1 = _hovered ? Theme.BgSurface3 : Theme.BgSurface2;
+                    bg2 = _hovered ? Theme.BgSurface2 : Theme.BgSurface;
+                    fg = Theme.TextPrimary; break;
                 default:
-                    bg = _hovered ? Theme.AccentHover : Theme.Accent;
+                    bg1 = _hovered ? Theme.AccentHover : Theme.Accent;
+                    bg2 = _hovered ? Color.FromArgb(0, 140, 134) : Color.FromArgb(0, 125, 120);
                     fg = Color.White; break;
             }
 
-            using var brush = new SolidBrush(bg);
-            g.FillPath(brush, path);
+            if (r.Width > 0 && r.Height > 0)
+            {
+                using var brush = new LinearGradientBrush(r, bg1, bg2, 135f);
+                g.FillPath(brush, path);
+            }
 
             if (Style == BtnStyle.Secondary)
             {
-                using var pen = new Pen(Theme.Border, 1);
+                using var pen = new Pen(Color.FromArgb(40, 255, 255, 255), 1);
                 g.DrawPath(pen, path);
             }
 
@@ -70,10 +93,15 @@ namespace CMS.Controls
         private static GraphicsPath RoundedRect(Rectangle r, int radius)
         {
             var path = new GraphicsPath();
-            path.AddArc(r.X, r.Y, radius * 2, radius * 2, 180, 90);
-            path.AddArc(r.Right - radius * 2, r.Y, radius * 2, radius * 2, 270, 90);
-            path.AddArc(r.Right - radius * 2, r.Bottom - radius * 2, radius * 2, radius * 2, 0, 90);
-            path.AddArc(r.X, r.Bottom - radius * 2, radius * 2, radius * 2, 90, 90);
+            if (radius <= 0 || r.Width <= 0 || r.Height <= 0) { path.AddRectangle(r); return path; }
+            int d = radius * 2;
+            if (d > r.Width) d = r.Width;
+            if (d > r.Height) d = r.Height;
+            if (d <= 0) { path.AddRectangle(r); return path; }
+            path.AddArc(r.X, r.Y, d, d, 180, 90);
+            path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+            path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+            path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
             path.CloseFigure();
             return path;
         }
@@ -97,45 +125,59 @@ namespace CMS.Controls
         public StatCard()
         {
             Height = 100;
-            BackColor = Theme.BgSurface;
+            BackColor = Color.Transparent;
+            DoubleBuffered = true;
         }
 
         protected override void OnPaint(PaintEventArgs e)
         {
-            base.OnPaint(e);
             var g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
 
             var r = new Rectangle(0, 0, Width - 1, Height - 1);
-            using var bgBrush = new SolidBrush(Theme.BgSurface);
-            using var path = RoundedRect(r, 10);
+            using var path = RoundedRect(r, 24);
+            
+            // Frosted Glass Fill
+            using var bgBrush = new SolidBrush(Color.FromArgb(15, Theme.TextPrimary));
             g.FillPath(bgBrush, path);
 
-            using var borderPen = new Pen(Theme.Border, 1f);
+            // Glass Highlight Border
+            using var borderPen = new Pen(Color.FromArgb(25, Theme.TextPrimary), 1f);
             g.DrawPath(borderPen, path);
+            
+            // Inner glow to simulate thickness
+            var innerR = new Rectangle(1, 1, Width - 3, Height - 3);
+            using var innerPath = RoundedRect(innerR, 23);
+            using var innerPen = new Pen(Color.FromArgb(10, Theme.TextPrimary), 1f);
+            g.DrawPath(innerPen, innerPath);
 
-            using var accentBrush = new SolidBrush(AccentColor);
-            g.FillRectangle(accentBrush, 0, 14, 4, Height - 28);
-
-            int px = 18;
-            using var labelBrush = new SolidBrush(Theme.TextMuted);
-            g.DrawString(StatLabel.ToUpper(), new Font("Segoe UI", 8f, FontStyle.Bold), labelBrush, px, 16);
+            int px = 24;
+            using var labelBrush = new SolidBrush(Color.FromArgb(160, Theme.TextPrimary));
+            using var titleFont = Theme.SafeFont(8.5f, FontStyle.Regular);
+            g.DrawString(StatLabel.ToUpperInvariant(), titleFont, labelBrush, px, 20);
 
             using var valueBrush = new SolidBrush(AccentColor);
-            using var valueFont = new Font("Segoe UI", 24f, FontStyle.Bold);
-            g.DrawString(StatValue, valueFont, valueBrush, px, 32);
+            using var valueFont = Theme.SafeFont(28f, FontStyle.Bold);
+            g.DrawString(StatValue, valueFont, valueBrush, px - 4, 34);
 
-            using var subBrush = new SolidBrush(Theme.TextMuted);
-            g.DrawString(StatSub, Theme.FontSmall, subBrush, px, 72);
+            using var subBrush = new SolidBrush(Theme.TextSecondary);
+            using var subFont = Theme.SafeFont(9f, FontStyle.Regular);
+            g.DrawString(StatSub, subFont, subBrush, px, 82);
         }
 
         private static GraphicsPath RoundedRect(Rectangle r, int radius)
         {
             var path = new GraphicsPath();
-            path.AddArc(r.X, r.Y, radius * 2, radius * 2, 180, 90);
-            path.AddArc(r.Right - radius * 2, r.Y, radius * 2, radius * 2, 270, 90);
-            path.AddArc(r.Right - radius * 2, r.Bottom - radius * 2, radius * 2, radius * 2, 0, 90);
-            path.AddArc(r.X, r.Bottom - radius * 2, radius * 2, radius * 2, 90, 90);
+            if (radius <= 0 || r.Width <= 0 || r.Height <= 0) { path.AddRectangle(r); return path; }
+            int d = radius * 2;
+            if (d > r.Width) d = r.Width;
+            if (d > r.Height) d = r.Height;
+            if (d <= 0) { path.AddRectangle(r); return path; }
+            path.AddArc(r.X, r.Y, d, d, 180, 90);
+            path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+            path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+            path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
             path.CloseFigure();
             return path;
         }
@@ -146,6 +188,9 @@ namespace CMS.Controls
     {
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public string ItemText { get; set; } = "";
+
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public string ItemIcon { get; set; } = "";
 
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public string PageKey { get; set; } = "";
@@ -175,17 +220,31 @@ namespace CMS.Controls
         {
             var g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
 
             Color bgColor = IsActive ? Theme.SidebarHover : (_hovered ? Theme.SidebarHover : Theme.SidebarBg);
             g.FillRectangle(new SolidBrush(bgColor), 0, 0, Width, Height);
 
-            if (IsActive)
+            if (IsActive && Height - 16 > 0)
+            {
                 g.FillRectangle(new SolidBrush(Theme.SidebarActive), 0, 8, 3, Height - 16);
+                using var glow = new LinearGradientBrush(new Rectangle(3, 8, 10, Height - 16), Color.FromArgb(40, Theme.SidebarActive), Color.Transparent, 0f);
+                g.FillRectangle(glow, 3, 8, 10, Height - 16);
+            }
 
-            var textColor = IsActive ? Color.White : Theme.SidebarText;
+            var textColor = IsActive ? Theme.SidebarActive : Theme.SidebarText;
             using var tb = new SolidBrush(textColor);
             var font = IsActive ? Theme.FontNavBold : Theme.FontNav;
-            g.DrawString(ItemText, font, tb, 16, (Height - font.Height) / 2f);
+            
+            int textX = 16;
+            if (!string.IsNullOrEmpty(ItemIcon))
+            {
+                using var iconFont = new Font("Segoe Fluent Icons", 14f, FontStyle.Regular);
+                g.DrawString(ItemIcon, iconFont, tb, 16, (Height - iconFont.Height) / 2f + 1);
+                textX = 46;
+            }
+
+            g.DrawString(ItemText, font, tb, textX, (Height - font.Height) / 2f);
 
             if (BadgeCount >= 0)
             {
@@ -208,35 +267,54 @@ namespace CMS.Controls
     public class CardPanel : Panel
     {
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
-        public int Radius { get; set; } = 10;
+        public int Radius { get; set; } = 24;
 
         [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public Color BorderColor { get; set; } = Color.Transparent;
 
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
+        public Color CardColor { get; set; } = Theme.BgSurface;
+
         public CardPanel()
         {
-            BackColor = Theme.BgSurface;
+            BackColor = Color.Transparent;
+            DoubleBuffered = true;
         }
 
         protected override void OnPaint(PaintEventArgs e)
         {
-            base.OnPaint(e);
             var g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
             var r = new Rectangle(0, 0, Width - 1, Height - 1);
-            var color = BorderColor == Color.Transparent ? Theme.Border : BorderColor;
-            using var pen = new Pen(color, 1);
             using var path = RoundedRect(r, Radius);
+            
+            using var baseBrush = new SolidBrush(CardColor);
+            g.FillPath(baseBrush, path);
+
+            // Glass Highlight Border
+            var borderColor = BorderColor == Color.Transparent ? Color.FromArgb(25, Theme.TextPrimary) : BorderColor;
+            using var pen = new Pen(borderColor, 1);
             g.DrawPath(pen, path);
+
+            // Inner glow
+            var innerR = new Rectangle(1, 1, Width - 3, Height - 3);
+            using var innerPath = RoundedRect(innerR, Radius - 1);
+            using var innerPen = new Pen(Color.FromArgb(10, Theme.TextPrimary), 1f);
+            g.DrawPath(innerPen, innerPath);
         }
 
         private static GraphicsPath RoundedRect(Rectangle r, int radius)
         {
             var path = new GraphicsPath();
-            path.AddArc(r.X, r.Y, radius * 2, radius * 2, 180, 90);
-            path.AddArc(r.Right - radius * 2, r.Y, radius * 2, radius * 2, 270, 90);
-            path.AddArc(r.Right - radius * 2, r.Bottom - radius * 2, radius * 2, radius * 2, 0, 90);
-            path.AddArc(r.X, r.Bottom - radius * 2, radius * 2, radius * 2, 90, 90);
+            if (radius <= 0 || r.Width <= 0 || r.Height <= 0) { path.AddRectangle(r); return path; }
+            int d = radius * 2;
+            if (d > r.Width) d = r.Width;
+            if (d > r.Height) d = r.Height;
+            if (d <= 0) { path.AddRectangle(r); return path; }
+            path.AddArc(r.X, r.Y, d, d, 180, 90);
+            path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+            path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+            path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
             path.CloseFigure();
             return path;
         }
@@ -246,10 +324,15 @@ namespace CMS.Controls
             base.OnResize(e);
             var path = new GraphicsPath();
             var r = new Rectangle(0, 0, Width, Height);
-            path.AddArc(r.X, r.Y, Radius * 2, Radius * 2, 180, 90);
-            path.AddArc(r.Right - Radius * 2, r.Y, Radius * 2, Radius * 2, 270, 90);
-            path.AddArc(r.Right - Radius * 2, r.Bottom - Radius * 2, Radius * 2, Radius * 2, 0, 90);
-            path.AddArc(r.X, r.Bottom - Radius * 2, Radius * 2, Radius * 2, 90, 90);
+            if (Radius <= 0 || r.Width <= 0 || r.Height <= 0) { path.AddRectangle(r); Region = new Region(path); return; }
+            int d = Radius * 2;
+            if (d > r.Width) d = r.Width;
+            if (d > r.Height) d = r.Height;
+            if (d <= 0) { path.AddRectangle(r); Region = new Region(path); return; }
+            path.AddArc(r.X, r.Y, d, d, 180, 90);
+            path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+            path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+            path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
             path.CloseFigure();
             Region = new Region(path);
         }
@@ -327,22 +410,30 @@ namespace CMS.Controls
         {
             var g = e.Graphics;
             g.SmoothingMode = SmoothingMode.AntiAlias;
+            
+            Control? p = this.Parent;
+            Color baseBg = Theme.BgMain;
+            while (p != null) { if (p.BackColor != Color.Transparent) { baseBg = p.BackColor; break; } p = p.Parent; }
+            g.Clear(baseBg);
+
             Color bg; Color fg;
             switch (Badge)
             {
                 case BadgeType.Green:
-                    bg = Color.FromArgb(209, 250, 229); fg = Color.FromArgb(6, 95, 70); break;
+                    bg = Color.FromArgb(40, 16, 185, 129); fg = Color.FromArgb(52, 211, 153); break; // Approved
                 case BadgeType.Yellow:
-                    bg = Color.FromArgb(254, 243, 199); fg = Color.FromArgb(120, 80, 4); break;
+                    bg = Color.FromArgb(40, 245, 158, 11); fg = Color.FromArgb(252, 211, 77); break; // Pending
                 case BadgeType.Red:
-                    bg = Color.FromArgb(254, 226, 226); fg = Color.FromArgb(153, 27, 27); break;
+                    bg = Color.FromArgb(40, 239, 68, 68); fg = Color.FromArgb(248, 113, 113); break;  // Rejected
                 default:
-                    bg = Color.FromArgb(219, 234, 254); fg = Color.FromArgb(29, 78, 216); break;
+                    bg = Color.FromArgb(40, 59, 130, 246); fg = Color.FromArgb(96, 165, 250); break;  // Blue
             }
             using var brush = new SolidBrush(bg);
             var r = new Rectangle(0, 0, Width - 1, Height - 1);
-            using var path = RoundedRect(r, 4);
+            using var path = RoundedRect(r, Height / 2); // Fully pill shaped
             g.FillPath(brush, path);
+            using var borderPen = new Pen(Color.FromArgb(80, fg), 1);
+            g.DrawPath(borderPen, path);
             using var tb = new SolidBrush(fg);
             var sf = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
             g.DrawString(Text, Font, tb, new RectangleF(0, 0, Width, Height), sf);
@@ -351,10 +442,15 @@ namespace CMS.Controls
         private static GraphicsPath RoundedRect(Rectangle r, int radius)
         {
             var path = new GraphicsPath();
-            path.AddArc(r.X, r.Y, radius * 2, radius * 2, 180, 90);
-            path.AddArc(r.Right - radius * 2, r.Y, radius * 2, radius * 2, 270, 90);
-            path.AddArc(r.Right - radius * 2, r.Bottom - radius * 2, radius * 2, radius * 2, 0, 90);
-            path.AddArc(r.X, r.Bottom - radius * 2, radius * 2, radius * 2, 90, 90);
+            if (radius <= 0 || r.Width <= 0 || r.Height <= 0) { path.AddRectangle(r); return path; }
+            int d = radius * 2;
+            if (d > r.Width) d = r.Width;
+            if (d > r.Height) d = r.Height;
+            if (d <= 0) { path.AddRectangle(r); return path; }
+            path.AddArc(r.X, r.Y, d, d, 180, 90);
+            path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+            path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+            path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
             path.CloseFigure();
             return path;
         }

@@ -11,7 +11,6 @@ namespace CMS
         static void Main()
         {
             ApplicationConfiguration.Initialize();
-            Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
@@ -23,7 +22,15 @@ namespace CMS
             if (login.ShowDialog() != DialogResult.OK)
                 return; // Giriş yapılmadıysa kapat
 
-            Application.Run(new MainForm());
+            try
+            {
+                Application.Run(new MainForm());
+            }
+            catch (Exception ex)
+            {
+                System.IO.File.WriteAllText("crash.log", ex.ToString());
+                MessageBox.Show(ex.Message, "Fatal Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
     }
 }

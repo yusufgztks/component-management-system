@@ -15,92 +15,109 @@ namespace CMS.Views
         public LoginForm()
         {
             BuildForm();
+            Theme.UpdateForm(this);
         }
 
         private void BuildForm()
         {
-            Text            = "CMS — Giriş";
-            Size            = new Size(420, 520);
-            MinimumSize     = new Size(420, 520);
-            MaximumSize     = new Size(420, 520);
+            Text            = "CMS — Login";
+            ClientSize      = new Size(420, 420);
             StartPosition   = FormStartPosition.CenterScreen;
-            BackColor       = Theme.BgMain;
+            BackColor       = Theme.SidebarBg;
             Font            = Theme.FontBody;
             FormBorderStyle = FormBorderStyle.FixedSingle;
             MaximizeBox     = false;
 
+            try
+            {
+                using var bmp = new Bitmap(Image.FromFile(System.IO.Path.Combine(Application.StartupPath, "Resources", "feka_icon.png")));
+                this.Icon = Icon.FromHandle(bmp.GetHicon());
+            }
+            catch { }
+
             // ── Logo / Başlık ────────────────────────────────────────────
-            var pnlLogo = new Panel
-            {
-                Left = 0, Top = 0, Width = 420, Height = 120,
-                BackColor = Theme.SidebarBg,
-            };
-            Controls.Add(pnlLogo);
+            var pnlLogo = new Panel { Width = 420, Height = 148, Left = 0, Top = 0, BackColor = Theme.SidebarBg, Parent = this };
 
-            new Label
+            var logoPath = System.IO.Path.Combine(Application.StartupPath, "Resources", "feka_logo.png");
+            if (System.IO.File.Exists(logoPath))
             {
-                Text      = "CMS",
-                Font      = new Font("Segoe UI", 28f, FontStyle.Bold),
-                ForeColor = Color.FromArgb(79, 124, 255),
-                AutoSize  = true,
-                Left      = 30, Top = 28,
-                Parent    = pnlLogo,
-            };
-            new Label
+                var pb = new PictureBox
+                {
+                    Image     = Image.FromFile(logoPath),
+                    SizeMode  = PictureBoxSizeMode.Zoom,
+                    Width     = 220, Height = 74,
+                    Left      = 100, Top = 20,
+                    Parent    = pnlLogo,
+                };
+                new Label
+                {
+                    Text      = "Component\nManagement System",
+                    Font      = new Font("Century Gothic", 12f, FontStyle.Bold),
+                    ForeColor = Theme.TextSecondary,
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    AutoSize  = false,
+                    Width     = 420, Height = 48,
+                    Left      = 0, Top = 90,
+                    Parent    = pnlLogo,
+                };
+            }
+            else
             {
-                Text      = "Component Management System",
-                Font      = new Font("Segoe UI", 9f),
-                ForeColor = Color.FromArgb(100, 116, 150),
-                AutoSize  = true,
-                Left      = 30, Top = 82,
-                Parent    = pnlLogo,
-            };
+                new Label
+                {
+                    Text      = "CMS",
+                    Font      = new Font("Segoe UI", 28f, FontStyle.Bold),
+                    ForeColor = Theme.Accent,
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    AutoSize  = false,
+                    Width     = 420, Height = 60,
+                    Left      = 0, Top = 20,
+                    Parent    = pnlLogo,
+                };
+                new Label
+                {
+                    Text      = "Component\nManagement System",
+                    Font      = new Font("Century Gothic", 12f, FontStyle.Bold),
+                    ForeColor = Theme.TextSecondary,
+                    TextAlign = ContentAlignment.MiddleCenter,
+                    AutoSize  = false,
+                    Width     = 420, Height = 48,
+                    Left      = 0, Top = 90,
+                    Parent    = pnlLogo,
+                };
+            }
 
-            // ── Kart ────────────────────────────────────────────────────
-            var card = new Panel
+            var card = new CardPanel
             {
+                Radius    = 12,
                 Left      = 30, Top = 148,
-                Width     = 360, Height = 310,
-                BackColor = Theme.BgSurface,
-            };
-            card.Paint += (s, e) =>
-            {
-                using var pen = new Pen(Theme.Border, 1);
-                e.Graphics.DrawRectangle(pen, 0, 0, card.Width - 1, card.Height - 1);
+                Width     = 360, Height = 238,
+                CardColor = Theme.BgSurface,
             };
             Controls.Add(card);
-
-            new Label
-            {
-                Text      = "Giriş Yap",
-                Font      = new Font("Segoe UI", 13f, FontStyle.Bold),
-                ForeColor = Theme.TextPrimary,
-                AutoSize  = true,
-                Left      = 24, Top = 24,
-                Parent    = card,
-            };
 
             // Kullanıcı adı
             new Label
             {
-                Text      = "User Name",
+                Text      = "Username",
                 Font      = Theme.FontBold,
                 ForeColor = Theme.TextSecondary,
                 AutoSize  = true,
-                Left      = 24, Top = 72,
+                Left      = 24, Top = 20,
                 Parent    = card,
             };
             _txtUsername = new TextBox
             {
-                Left            = 24, Top = 94,
+                Left            = 24, Top = 42,
                 Width           = 312, Height = 34,
                 BorderStyle     = BorderStyle.FixedSingle,
                 BackColor       = Theme.BgSurface2,
                 ForeColor       = Theme.TextPrimary,
                 Font            = Theme.FontBody,
-                PlaceholderText = "User Name ",
+                PlaceholderText = "Username",
                 Parent          = card,
             };
+            Theme.MakeRounded(_txtUsername, 6);
             _txtUsername.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) _txtPassword.Focus(); };
 
             // Şifre
@@ -110,12 +127,12 @@ namespace CMS.Views
                 Font      = Theme.FontBold,
                 ForeColor = Theme.TextSecondary,
                 AutoSize  = true,
-                Left      = 24, Top = 142,
+                Left      = 24, Top = 90,
                 Parent    = card,
             };
             _txtPassword = new TextBox
             {
-                Left            = 24, Top = 164,
+                Left            = 24, Top = 112,
                 Width           = 312, Height = 34,
                 BorderStyle     = BorderStyle.FixedSingle,
                 BackColor       = Theme.BgSurface2,
@@ -125,6 +142,7 @@ namespace CMS.Views
                 PlaceholderText = "Password",
                 Parent          = card,
             };
+            Theme.MakeRounded(_txtPassword, 6);
             _txtPassword.KeyDown += (s, e) => { if (e.KeyCode == Keys.Enter) DoLogin(); };
 
             // Hata mesajı
@@ -134,7 +152,8 @@ namespace CMS.Views
                 Font      = Theme.FontSmall,
                 ForeColor = Theme.Danger,
                 AutoSize  = false,
-                Left      = 24, Top = 210,
+                TextAlign = ContentAlignment.MiddleCenter,
+                Left      = 24, Top = 148,
                 Width     = 312, Height = 18,
                 Parent    = card,
             };
@@ -142,23 +161,14 @@ namespace CMS.Views
             // Giriş butonu
             var btnLogin = new ModernButton
             {
-                Text   = "Giriş Yap",
+                Text   = "Login",
                 Style  = ModernButton.BtnStyle.Primary,
                 Width  = 312, Height = 40,
-                Left   = 24, Top = 240,
+                Left   = 24, Top = 168,
+                CustomBgColor = Theme.BgSurface,
                 Parent = card,
             };
             btnLogin.Click += (s, e) => DoLogin();
-
-            // Alt bilgi
-            new Label
-            {
-                Text      = "Varsayılan: admin / admin123",
-                Font      = new Font("Segoe UI", 7.5f),
-                ForeColor = Color.FromArgb(80, 96, 120),
-                AutoSize  = true,
-                Left      = 30, Top = 472,
-            }.Parent = this;
         }
 
         private void DoLogin()
@@ -168,7 +178,7 @@ namespace CMS.Views
 
             if (string.IsNullOrWhiteSpace(user) || string.IsNullOrWhiteSpace(pass))
             {
-                _lblError.Text = "Kullanıcı adı ve şifre gerekli.";
+                _lblError.Text = "Username and password are required.";
                 return;
             }
 
@@ -179,7 +189,7 @@ namespace CMS.Views
             }
             else
             {
-                _lblError.Text = "Kullanıcı adı veya şifre hatalı.";
+                _lblError.Text = "Invalid username or password.";
                 _txtPassword.Clear();
                 _txtPassword.Focus();
             }

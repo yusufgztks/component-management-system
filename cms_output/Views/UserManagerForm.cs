@@ -18,13 +18,14 @@ namespace CMS.Views
         {
             BuildForm();
             RefreshGrid();
+            Theme.UpdateForm(this);
         }
 
         private void BuildForm()
         {
             Text            = "User Management";
-            Size            = new Size(780, 560);
-            MinimumSize     = new Size(700, 480);
+            Size            = new Size(1000, 700);
+            MinimumSize     = new Size(900, 600);
             StartPosition   = FormStartPosition.CenterParent;
             BackColor       = Theme.BgMain;
             Font            = Theme.FontBody;
@@ -50,34 +51,36 @@ namespace CMS.Views
                 Parent    = topBar,
             };
 
-            // ── Sol: Kullanıcı Listesi ───────────────────────────────────
-            var leftPanel = new Panel
+            var table = new TableLayoutPanel
             {
-                Left      = 0, Top = 52,
-                Width     = 500,
-                Anchor    = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Bottom | AnchorStyles.Right,
-                BackColor = Theme.BgMain,
+                Dock = DockStyle.Fill,
+                ColumnCount = 2,
+                RowCount = 1,
+                BackColor = Color.Transparent,
+                Padding = new Padding(16, 16, 16, 16)
             };
-            Controls.Add(leftPanel);
-            Resize += (s, e) =>
-            {
-                leftPanel.Width  = ClientSize.Width - 260;
-                leftPanel.Height = ClientSize.Height - 52;
-            };
+            table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100f));
+            table.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 340f));
+            Controls.Add(table);
+            table.BringToFront();
 
-            new Label
+            // ── Sol: Kullanıcı Listesi ───────────────────────────────────
+            var leftCard = new CardPanel
             {
-                Text      = "Registered Users",
-                Font      = new Font("Segoe UI", 9.5f, FontStyle.Bold),
-                ForeColor = Theme.TextSecondary,
-                AutoSize  = true,
-                Left      = 16, Top = 14,
-                Parent    = leftPanel,
+                Dock      = DockStyle.Fill,
+                Margin    = new Padding(0, 0, 16, 0),
+                CardColor = Theme.BgSurface,
+                Radius    = 12
             };
+            table.Controls.Add(leftCard, 0, 0);
+
+            var gridHeader = new Panel { Dock = DockStyle.Top, Height = 56, BackColor = Color.Transparent };
+            new Label { Text = "Registered Users", Font = Theme.FontH2, ForeColor = Theme.TextSecondary, AutoSize = true, Left = 16, Top = 16, Parent = gridHeader };
+            leftCard.Controls.Add(gridHeader);
 
             _grid = new DataGridView
             {
-                Left                  = 8, Top = 42,
+                Dock                  = DockStyle.Fill,
                 ReadOnly              = true,
                 AllowUserToAddRows    = false,
                 AllowUserToDeleteRows = false,
@@ -86,24 +89,26 @@ namespace CMS.Views
                 SelectionMode         = DataGridViewSelectionMode.FullRowSelect,
                 BackgroundColor       = Theme.BgSurface,
                 BorderStyle           = BorderStyle.None,
+                CellBorderStyle       = DataGridViewCellBorderStyle.SingleHorizontal,
                 GridColor             = Theme.Border,
                 Font                  = Theme.FontBody,
-                ColumnHeadersHeight   = 32,
+                ColumnHeadersHeight   = 44,
                 ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing,
-                Anchor                = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom,
-                Parent                = leftPanel,
+                ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None,
+                RowTemplate           = { Height = 48 }
             };
+            typeof(DataGridView).InvokeMember("DoubleBuffered", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.SetProperty, null, _grid, new object[] { true });
             _grid.AutoGenerateColumns = false;
-            _grid.DefaultCellStyle              = new DataGridViewCellStyle { BackColor = Theme.BgSurface, ForeColor = Theme.TextPrimary, SelectionBackColor = Theme.AccentLight, SelectionForeColor = Theme.Accent, Padding = new Padding(4, 0, 4, 0) };
-            _grid.AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(248, 250, 252), ForeColor = Theme.TextPrimary, SelectionBackColor = Theme.AccentLight, SelectionForeColor = Theme.Accent };
-            _grid.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(243, 246, 250), ForeColor = Theme.TextSecondary, Font = new Font("Segoe UI", 8.5f, FontStyle.Bold) };
+            _grid.DefaultCellStyle              = new DataGridViewCellStyle { BackColor = Theme.BgSurface, ForeColor = Theme.TextPrimary, SelectionBackColor = Theme.AccentLight, SelectionForeColor = Theme.Accent, Padding = new Padding(16, 0, 16, 0) };
+            _grid.AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle { BackColor = Theme.BgSurface2, ForeColor = Theme.TextPrimary, SelectionBackColor = Theme.AccentLight, SelectionForeColor = Theme.Accent, Padding = new Padding(16, 0, 16, 0) };
+            _grid.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle { BackColor = Theme.BgSurface, ForeColor = Theme.TextSecondary, Font = new Font("Segoe UI", 9f, FontStyle.Bold), Padding = new Padding(16, 0, 16, 0) };
             _grid.EnableHeadersVisualStyles     = false;
 
-            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Id",        HeaderText = "ID",          Width = 40,  DataPropertyName = "Id",       SortMode = DataGridViewColumnSortMode.NotSortable });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Id",        HeaderText = "ID",          Width = 60, DataPropertyName = "Id",       SortMode = DataGridViewColumnSortMode.NotSortable });
             _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Username",  HeaderText = "Username",    Width = 160, DataPropertyName = "Username", SortMode = DataGridViewColumnSortMode.NotSortable, AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
             _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "IsAdmin",   HeaderText = "Role",        Width = 100, DataPropertyName = "IsAdmin",  SortMode = DataGridViewColumnSortMode.NotSortable });
-            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "IsActive",  HeaderText = "Status",      Width = 80,  DataPropertyName = "IsActive", SortMode = DataGridViewColumnSortMode.NotSortable });
-            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "CreatedAt", HeaderText = "Created At",  Width = 120, DataPropertyName = "CreatedAt",SortMode = DataGridViewColumnSortMode.NotSortable });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "IsActive",  HeaderText = "Status",      Width = 100,  DataPropertyName = "IsActive", SortMode = DataGridViewColumnSortMode.NotSortable });
+            _grid.Columns.Add(new DataGridViewTextBoxColumn { Name = "CreatedAt", HeaderText = "Created At",  Width = 140, DataPropertyName = "CreatedAt",SortMode = DataGridViewColumnSortMode.NotSortable });
 
             _grid.CellFormatting += (s, e) =>
             {
@@ -113,83 +118,59 @@ namespace CMS.Views
                     bool isAdmin = e.Value is true;
                     e.Value = isAdmin ? "Admin" : "User";
                     e.CellStyle.ForeColor = isAdmin ? Theme.Accent : Theme.TextSecondary;
-                    e.CellStyle.Font      = new Font("Segoe UI", 8.5f, isAdmin ? FontStyle.Bold : FontStyle.Regular);
+                    e.CellStyle.Font      = new Font("Segoe UI", 9f, isAdmin ? FontStyle.Bold : FontStyle.Regular);
                 }
                 if (_grid.Columns[e.ColumnIndex].Name == "IsActive")
                 {
                     bool active = e.Value is true;
                     e.Value = active ? "Active" : "Inactive";
                     e.CellStyle.ForeColor = active ? Theme.AccentGreen : Theme.Danger;
-                    e.CellStyle.Font      = new Font("Segoe UI", 8.5f, FontStyle.Bold);
+                    e.CellStyle.Font      = new Font("Segoe UI", 9f, FontStyle.Bold);
                 }
                 if (_grid.Columns[e.ColumnIndex].Name == "CreatedAt" && e.Value is DateTime dt)
                     e.Value = dt.ToString("dd.MM.yyyy HH:mm");
             };
-
-            leftPanel.Resize += (s, e) =>
-            {
-                _grid.Width  = leftPanel.ClientSize.Width - 8;
-                _grid.Height = leftPanel.ClientSize.Height - 42;
-            };
-
-            // ── Eylem butonları (grid altına kontekst menüsü yerine butonlar) ──
-            var ctxMenu = new ContextMenuStrip();
-            ctxMenu.Items.Add("Make Admin",          null, (s, e) => SetAdminForSelected(true));
-            ctxMenu.Items.Add("Remove Admin",        null, (s, e) => SetAdminForSelected(false));
-            ctxMenu.Items.Add("-");
-            ctxMenu.Items.Add("Toggle Active/Inactive", null, (s, e) => ToggleActive());
-            ctxMenu.Items.Add("Reset Password",         null, (s, e) => ResetPassword());
-            ctxMenu.Items.Add("-");
-            ctxMenu.Items.Add("Delete User",            null, (s, e) => DeleteSelected());
-            _grid.ContextMenuStrip = ctxMenu;
+            leftCard.Controls.Add(_grid);
+            _grid.BringToFront(); // Ensure grid is below header due to Docking
 
             // ── Sağ: Yeni Kullanıcı Ekle ────────────────────────────────
-            var rightCard = new Panel
+            var rightCard = new CardPanel
             {
-                Left      = ClientSize.Width - 252, Top = 52,
-                Width     = 244,
-                Anchor    = AnchorStyles.Top | AnchorStyles.Right | AnchorStyles.Bottom,
-                BackColor = Theme.BgSurface,
+                Dock      = DockStyle.Fill,
+                CardColor = Theme.BgSurface,
+                Radius    = 12
             };
-            rightCard.Paint += (s, e) =>
-            {
-                using var pen = new Pen(Theme.Border, 1);
-                e.Graphics.DrawRectangle(pen, 0, 0, rightCard.Width - 1, rightCard.Height - 1);
-            };
-            Controls.Add(rightCard);
-            Resize += (s, e) =>
-            {
-                rightCard.Left   = ClientSize.Width - 252;
-                rightCard.Height = ClientSize.Height - 52;
-            };
+            table.Controls.Add(rightCard, 1, 0);
 
-            new Label { Text = "Add New User", Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), ForeColor = Theme.TextSecondary, AutoSize = true, Left = 16, Top = 16, Parent = rightCard };
+            new Label { Text = "Add New User", Font = Theme.FontH2, ForeColor = Theme.TextSecondary, AutoSize = true, Left = 24, Top = 16, Parent = rightCard };
 
-            new Label { Text = "Username", Font = Theme.FontBold, ForeColor = Theme.TextSecondary, AutoSize = true, Left = 16, Top = 52, Parent = rightCard };
-            _txtUser = new TextBox { Left = 16, Top = 72, Width = 212, Height = 32, BorderStyle = BorderStyle.FixedSingle, BackColor = Theme.BgSurface2, ForeColor = Theme.TextPrimary, Font = Theme.FontBody, Parent = rightCard };
+            new Label { Text = "Username", Font = Theme.FontBold, ForeColor = Theme.TextSecondary, AutoSize = true, Left = 24, Top = 64, Parent = rightCard };
+            _txtUser = new TextBox { Left = 24, Top = 88, Width = 292, Height = 34, BorderStyle = BorderStyle.FixedSingle, BackColor = Theme.BgSurface2, ForeColor = Theme.TextPrimary, Font = Theme.FontBody, Parent = rightCard };
+            Theme.MakeRounded(_txtUser, 6);
 
-            new Label { Text = "Password", Font = Theme.FontBold, ForeColor = Theme.TextSecondary, AutoSize = true, Left = 16, Top = 114, Parent = rightCard };
-            _txtPass = new TextBox { Left = 16, Top = 134, Width = 212, Height = 32, BorderStyle = BorderStyle.FixedSingle, BackColor = Theme.BgSurface2, ForeColor = Theme.TextPrimary, Font = Theme.FontBody, PasswordChar = '●', Parent = rightCard };
+            new Label { Text = "Password", Font = Theme.FontBold, ForeColor = Theme.TextSecondary, AutoSize = true, Left = 24, Top = 140, Parent = rightCard };
+            _txtPass = new TextBox { Left = 24, Top = 164, Width = 292, Height = 34, BorderStyle = BorderStyle.FixedSingle, BackColor = Theme.BgSurface2, ForeColor = Theme.TextPrimary, Font = Theme.FontBody, PasswordChar = '●', Parent = rightCard };
+            Theme.MakeRounded(_txtPass, 6);
 
-            _chkAdmin = new CheckBox { Text = "Grant Admin Privileges", Font = Theme.FontBody, ForeColor = Theme.TextPrimary, Left = 16, Top = 182, AutoSize = true, Parent = rightCard };
+            _chkAdmin = new CheckBox { Text = "Grant Admin Privileges", Font = Theme.FontBody, ForeColor = Theme.TextPrimary, Left = 24, Top = 216, AutoSize = true, Parent = rightCard };
 
-            var btnAdd = new ModernButton { Text = "Add User", Style = ModernButton.BtnStyle.Success, Width = 212, Height = 36, Left = 16, Top = 216, Parent = rightCard };
+            var btnAdd = new ModernButton { Text = "Add User", Style = ModernButton.BtnStyle.Success, Width = 292, Height = 40, Left = 24, Top = 252, CustomBgColor = Theme.BgSurface, Parent = rightCard };
             btnAdd.Click += BtnAddUser_Click;
 
             // Seçili kullanıcı için hızlı eylemler
-            new Panel { Left = 16, Top = 270, Width = 212, Height = 1, BackColor = Theme.Border, Parent = rightCard };
-            new Label { Text = "Selected User", Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), ForeColor = Theme.TextSecondary, AutoSize = true, Left = 16, Top = 280, Parent = rightCard };
+            var sep = new Panel { Left = 24, Top = 320, Width = 292, Height = 1, BackColor = Theme.Border, Parent = rightCard };
+            new Label { Text = "Selected User Actions", Font = Theme.FontH2, ForeColor = Theme.TextSecondary, AutoSize = true, Left = 24, Top = 340, Parent = rightCard };
 
-            var btnToggleAdmin = new ModernButton { Text = "Toggle Admin Privileges", Style = ModernButton.BtnStyle.Primary, Width = 212, Height = 34, Left = 16, Top = 310, Parent = rightCard };
-            btnToggleAdmin.Click += (s, e) => ToggleAdmin();
+            var btnMakeAdmin = new ModernButton { Text = "Make Admin", Style = ModernButton.BtnStyle.Primary, Width = 292, Height = 36, Left = 24, Top = 380, CustomBgColor = Theme.BgSurface, Parent = rightCard };
+            btnMakeAdmin.Click += (s, e) => SetAdminForSelected(true);
 
-            var btnToggleActive = new ModernButton { Text = "Toggle Active/Inactive", Style = ModernButton.BtnStyle.Secondary, Width = 212, Height = 34, Left = 16, Top = 352, Parent = rightCard };
-            btnToggleActive.Click += (s, e) => ToggleActive();
+            var btnRevokeAdmin = new ModernButton { Text = "Revoke Admin", Style = ModernButton.BtnStyle.Secondary, Width = 292, Height = 36, Left = 24, Top = 424, CustomBgColor = Theme.BgSurface, Parent = rightCard };
+            btnRevokeAdmin.Click += (s, e) => SetAdminForSelected(false);
 
-            var btnResetPw = new ModernButton { Text = "Reset Password", Style = ModernButton.BtnStyle.Secondary, Width = 212, Height = 34, Left = 16, Top = 394, Parent = rightCard };
+            var btnResetPw = new ModernButton { Text = "Reset Password", Style = ModernButton.BtnStyle.Secondary, Width = 292, Height = 36, Left = 24, Top = 468, CustomBgColor = Theme.BgSurface, Parent = rightCard };
             btnResetPw.Click += (s, e) => ResetPassword();
 
-            var btnDelete = new ModernButton { Text = "Delete User", Style = ModernButton.BtnStyle.Danger, Width = 212, Height = 34, Left = 16, Top = 436, Parent = rightCard };
+            var btnDelete = new ModernButton { Text = "Delete User", Style = ModernButton.BtnStyle.Danger, Width = 292, Height = 36, Left = 24, Top = 512, CustomBgColor = Theme.BgSurface, Parent = rightCard };
             btnDelete.Click += (s, e) => DeleteSelected();
         }
 

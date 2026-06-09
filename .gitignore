@@ -1,2 +1,7 @@
+cms_output/obj/Debug/*
+cms_output/bin/Debug/*
+cms_output/obj/
+cms_output/bin/
+crash.log
 bin/
 obj/

@@ -1,6 +1,5 @@
 using System;
 using System.Windows.Forms;
-using CMS.Data;
 using CMS.Views;
 
 namespace CMS
@@ -11,26 +10,10 @@ namespace CMS
         static void Main()
         {
             ApplicationConfiguration.Initialize();
+            Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-
-            // Kullanıcı veritabanını başlat
-            UserRepository.Initialize();
-
-            // Login ekranını aç
-            using var login = new LoginForm();
-            if (login.ShowDialog() != DialogResult.OK)
-                return; // Giriş yapılmadıysa kapat
-
-            try
-            {
-                Application.Run(new MainForm());
-            }
-            catch (Exception ex)
-            {
-                System.IO.File.WriteAllText("crash.log", ex.ToString());
-                MessageBox.Show(ex.Message, "Fatal Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
-            }
+            Application.Run(new MainForm());
         }
     }
 }

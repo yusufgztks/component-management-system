@@ -67,6 +67,9 @@ namespace CMS.Views
         private ComboBox _addProcess = null!;
         private Panel    _extraPanel = null!;
         private readonly List<(string Key, Control Input)> _extraBoxes = new();
+        private Panel    _globalPanel = null!;
+        private readonly List<(string Key, Control Input)> _globalBoxes = new();
+        private Action   _reposition  = () => { };
 
         private DataGridView _approvalGrid = null!;
 
@@ -89,9 +92,6 @@ namespace CMS.Views
         private Panel _fieldDetailContent  = null!;
 
         private SidebarItem? _navApproval;
-        private SidebarItem? _navUserManager;
-
-        private Panel _pageUserManager = null!;
 
         // ── Category → Excel Sheet name mapping ───────────────────────────
         private static readonly Dictionary<string, string> CategorySheetMap = new(StringComparer.OrdinalIgnoreCase)
@@ -161,7 +161,6 @@ namespace CMS.Views
             BuildApproval();
             BuildExport();
             BuildCategoryManager();
-            BuildUserManagerPage();
             Navigate("dashboard");
 
             this.Shown += async (s, e) => await LoadDataAsync();
@@ -208,20 +207,13 @@ namespace CMS.Views
         private void InitForm()
         {
             Text            = "Component Management System";
-            Size            = new Size(1150, 720);
+            Size            = new Size(1300, 820);
             MinimumSize     = new Size(1100, 700);
             StartPosition   = FormStartPosition.CenterScreen;
             BackColor       = Theme.BgMain;
             Font            = Theme.FontBody;
             AutoScaleMode   = AutoScaleMode.Dpi;
             AutoScaleDimensions = new SizeF(96F, 96F);
-            DoubleBuffered  = true;
-            try
-            {
-                using var bmp = new Bitmap(Image.FromFile(System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "feka_icon.png")));
-                this.Icon = Icon.FromHandle(bmp.GetHicon());
-            }
-            catch { }
         }
 
         private void BuildLayout()
@@ -268,52 +260,30 @@ namespace CMS.Views
             };
             _sidebar.Controls.Add(flow);
 
-            var logoPanel = new Panel { Width = 220, Height = 150, BackColor = Theme.SidebarBg };
-            try
-            {
-                var pbLogo = new PictureBox
-                {
-                    Image = Image.FromFile(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Resources", "feka_logo.png")),
-                    SizeMode = PictureBoxSizeMode.Zoom,
-                    Width = 200, Height = 80, Left = 10, Top = 12
-                };
-                logoPanel.Controls.Add(pbLogo);
-            }
-            catch
-            {
-                logoPanel.Controls.Add(new Label { Text = " CMS", ForeColor = Theme.Accent, Font = new Font("Segoe UI", 16f, FontStyle.Bold), AutoSize = false, TextAlign = ContentAlignment.MiddleCenter, Width = 220, Height = 36, Left = 0, Top = 20 });
-            }
-
-            logoPanel.Controls.Add(new Label { Text = "Component Management\nSystem", ForeColor = Theme.TextSecondary, Font = new Font("Century Gothic", 10f, FontStyle.Regular), TextAlign = ContentAlignment.MiddleCenter, AutoSize = false, Width = 220, Height = 56, Left = 0, Top = 92 });
-            logoPanel.Paint += (s, e) => e.Graphics.DrawLine(new Pen(Theme.Border, 1), 0, 149, 220, 149);
+            var logoPanel = new Panel { Width = 220, Height = 68, BackColor = Theme.SidebarBg };
+            logoPanel.Controls.Add(new Label { Text = " CMS", ForeColor = Color.FromArgb(79,124,255), Font = new Font("Segoe UI", 14f, FontStyle.Bold), AutoSize = false, Width = 200, Height = 36, Left = 16, Top = 14 });
+            logoPanel.Controls.Add(new Label { Text = "Component Library", ForeColor = Color.FromArgb(100,116,150), Font = new Font("Segoe UI", 8f), AutoSize = false, Width = 200, Height = 16, Left = 18, Top = 48 });
+            logoPanel.Paint += (s, e) => e.Graphics.DrawLine(new Pen(Color.FromArgb(36, 47, 66), 1), 0, 67, 220, 67);
             flow.Controls.Add(logoPanel);
 
             AddNavSection(flow, "");
-            AddNavItem(flow, "\uE80F", "dashboard", "Dashboard");
-            AddNavItem(flow, "\uE8B7", "catalog",   "Catalog");
+            AddNavItem(flow, "",   "dashboard", "Dashboard");
+            AddNavItem(flow, "",   "catalog",   "Catalog");
 
             AddNavSection(flow, "MANAGE");
-            AddNavItem(flow, "\uE710", "add",        "Add Component");
-            _navApproval = AddNavItem(flow, "\uE73E", "approval", "Approvals");
+            AddNavItem(flow, "➕", "add",        "Add Component");
+            _navApproval = AddNavItem(flow, "", "approval", "Approvals");
             RefreshApprovalBadge();
 
             AddNavSection(flow, "SETTINGS");
-            AddNavItem(flow, "\uE713", "catmanager", "Category Manager");
+            AddNavItem(flow, "", "catmanager", "Category Manager");
 
             AddNavSection(flow, "TOOLS");
-            AddNavItem(flow, "\uE8D7", "export",     "Export / Import");
-
-            // ── SADECE ADMIN görür ────────────────────────────────────────
-            if (CMS.Data.UserRepository.IsAdminLoggedIn)
-            {
-                AddNavSection(flow, "ADMIN");
-                _navUserManager = AddNavItem(flow, "\uE77B", "usermanager", "User Management");
-            }
+            AddNavItem(flow, "", "export",     "Export / Import");
 
             var versionPanel = new Panel { Width = 220, Height = 40, BackColor = Theme.SidebarBg };
             versionPanel.Paint += (s, e) =>
             {
-                e.Graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
                 e.Graphics.DrawLine(new Pen(Color.FromArgb(36, 47, 66), 1), 0, 0, 220, 0);
                 e.Graphics.DrawString("CMS", new Font("Segoe UI", 7.5f),
                     new SolidBrush(Color.FromArgb(80, 96, 120)), 16, 12);
@@ -326,16 +296,16 @@ namespace CMS.Views
             flow.Controls.Add(new Label
             {
                 Text = title, Width = 220, Height = 28,
-                Font = new Font("Segoe UI", 9f, FontStyle.Bold),
+                Font = new Font("Segoe UI", 7.5f, FontStyle.Bold),
                 ForeColor = Color.FromArgb(80, 96, 120),
                 BackColor = Theme.SidebarBg,
-                Padding = new Padding(16, 8, 0, 0),
+                Padding = new Padding(16, 10, 0, 0),
             });
         }
 
         private SidebarItem AddNavItem(FlowLayoutPanel flow, string icon, string key, string label)
         {
-            var item = new SidebarItem { ItemText = label, ItemIcon = icon, PageKey = key, Width = 220 };
+            var item = new SidebarItem { ItemText = $"{icon}  {label}", PageKey = key, Width = 220 };
             item.Clicked += (s, e) => Navigate(key);
             flow.Controls.Add(item);
             _navItems.Add(item);
@@ -347,104 +317,14 @@ namespace CMS.Views
             _lblPageTitle = new Label { Font = Theme.FontH2, ForeColor = Theme.TextPrimary, AutoSize = true, Left = 24, Top = 17 };
             _topbar.Controls.Add(_lblPageTitle);
 
-            var rightFlow = new FlowLayoutPanel
-            {
-                FlowDirection = FlowDirection.RightToLeft,
-                Dock = DockStyle.Right,
-                AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink,
-                WrapContents = false,
-                Padding = new Padding(0, 12, 16, 0),
-                BackColor = Color.Transparent
-            };
-            _topbar.Controls.Add(rightFlow);
-
             var btnExport = new ModernButton
             {
-                Text = "Export CSV", Style = ModernButton.BtnStyle.Secondary,
-                Width = 110, Height = 32, Margin = new Padding(10, 0, 0, 0)
+                Text = "Export CSV", Style = ModernButton.BtnStyle.Primary,
+                Width = 110, Height = 32, Left = _topbar.Width - 148, Top = 12,
+                Anchor = AnchorStyles.Top | AnchorStyles.Right,
             };
             btnExport.Click += (s, e) => Navigate("export");
-            rightFlow.Controls.Add(btnExport);
-
-            var btnLogout = new ModernButton
-            {
-                Text   = "Logout",
-                Style  = ModernButton.BtnStyle.Secondary,
-                Width  = 70, Height = 32, Margin = new Padding(10, 0, 0, 0)
-            };
-            btnLogout.Click += (s, e) =>
-            {
-                if (MessageBox.Show("Are you sure you want to log out?", "Logout",
-                    MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
-                {
-                    CMS.Data.UserRepository.Logout();
-                    using var login = new LoginForm();
-                    if (login.ShowDialog() == DialogResult.OK)
-                    {
-                        Application.Restart();
-                    }
-                    else
-                    {
-                        Application.Exit();
-                    }
-                }
-            };
-            rightFlow.Controls.Add(btnLogout);
-
-            var btnTheme = new ModernButton
-            {
-                Text = Theme.IsDarkMode ? "☀️" : "🌙",
-                Style = ModernButton.BtnStyle.Secondary,
-                Width = 36, Height = 32, Margin = new Padding(10, 0, 0, 0),
-                Font = new Font("Segoe UI Emoji", 10f)
-            };
-            btnTheme.Click += (s, e) => 
-            {
-                Theme.Toggle();
-                
-                this.BackColor = Theme.BgMain;
-                _sidebar.BackColor = Theme.SidebarBg;
-                _topbar.BackColor = Theme.TopbarBg;
-                _content.BackColor = Theme.BgMain;
-                
-                _topbar.Controls.Clear(); BuildTopbar();
-                _sidebar.Controls.Clear(); BuildSidebar();
-                _content.Controls.Clear();
-                BuildDashboard();
-                BuildCatalog();
-                BuildAddForm();
-                BuildApproval();
-                BuildExport();
-                BuildCategoryManager();
-                BuildUserManagerPage();
-                
-                if (_dataLoaded)
-                {
-                    RefreshDashboard();
-                    RefreshCatalog();
-                    RefreshApproval();
-                    RefreshCategoryManager();
-                    if (CMS.Data.UserRepository.IsAdminLoggedIn) RefreshUserManagerPage();
-                }
-                
-                Navigate(_activePage ?? "dashboard");
-            };
-            rightFlow.Controls.Add(btnTheme);
-
-            var currentUser = CMS.Data.UserRepository.CurrentUser;
-            string roleText = (currentUser?.IsAdmin == true) ? "Admin" : "User";
-            string displayName = $" {currentUser?.Username ?? "?"} ({roleText})";
-
-            var lblUser = new Label
-            {
-                Text      = displayName,
-                Font      = new Font("Segoe UI", 8.5f, FontStyle.Bold),
-                ForeColor = currentUser?.IsAdmin == true ? Theme.Accent : Theme.TextSecondary,
-                AutoSize  = true,
-                Margin    = new Padding(10, 7, 0, 0)
-            };
-            rightFlow.Controls.Add(lblUser);
+            _topbar.Controls.Add(btnExport);
         }
 
         private void Navigate(string key)
@@ -459,25 +339,23 @@ namespace CMS.Views
 
             Panel? page = key switch
             {
-                "dashboard"   => _pageDashboard,
-                "catalog"     => _pageCatalog,
-                "add"         => _pageAdd,
-                "approval"    => _pageApproval,
-                "export"      => _pageExport,
-                "catmanager"  => _pageCatManager,
-                "usermanager" => _pageUserManager,
+                "dashboard"  => _pageDashboard,
+                "catalog"    => _pageCatalog,
+                "add"        => _pageAdd,
+                "approval"   => _pageApproval,
+                "export"     => _pageExport,
+                "catmanager" => _pageCatManager,
                 _ => null
             };
 
             _lblPageTitle.Text = key switch
             {
-                "dashboard"   => "Dashboard",
-                "catalog"     => "Component Catalog",
-                "add"         => "Add Component",
-                "approval"    => "Pending Approvals",
-                "export"      => "Export / Import",
-                "catmanager"  => "Category Manager",
-                "usermanager" => "User Manager",
+                "dashboard"  => "Dashboard",
+                "catalog"    => "Component Catalog",
+                "add"        => "Add Component",
+                "approval"   => "Pending Approvals",
+                "export"     => "Export / Import",
+                "catmanager" => "Category Manager",
                 _ => ""
             };
 
@@ -486,12 +364,6 @@ namespace CMS.Views
             if (key == "dashboard")  { try { if (_dataLoaded) RefreshDashboard(); } catch { } }
             if (key == "approval")   RefreshApproval();
             if (key == "catmanager") RefreshCategoryManager();
-            if (key == "usermanager")
-            {
-                if (!CMS.Data.UserRepository.IsAdminLoggedIn)
-                { MessageBox.Show("You do not have permission to access this page.", "Unauthorized Access", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
-                RefreshUserManagerPage();
-            }
             if (key == "catalog")
             {
                 if (!_dataLoaded)
@@ -508,27 +380,12 @@ namespace CMS.Views
         // ══════════════════════════════════════════════════════════════════
         private void BuildDashboard()
         {
-            _pageDashboard = new Panel { Dock = DockStyle.Fill, BackColor = Theme.BgMain, Visible = false, AutoScroll = true, AutoScrollMargin = new Size(0, 24) };
-            typeof(Panel).InvokeMember("DoubleBuffered", System.Reflection.BindingFlags.SetProperty | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic, null, _pageDashboard, new object[] { true });
-            _pageDashboard.Paint += (s, e) =>
-            {
-                var g = e.Graphics;
-                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-                var rect = _pageDashboard.ClientRectangle;
-                if (rect.Width <= 0 || rect.Height <= 0) return;
-                
-                // Draw gradient only in Light Mode to avoid scroll seams in Dark Mode
-                if (!Theme.IsDarkMode)
-                {
-                    using var brush = new System.Drawing.Drawing2D.LinearGradientBrush(rect, Theme.BgMain, Theme.BgSurface2, 45f);
-                    g.FillRectangle(brush, rect);
-                }
-            };
+            _pageDashboard = new Panel { Dock = DockStyle.Fill, BackColor = Theme.BgMain, Visible = false, AutoScroll = false };
             _content.Controls.Add(_pageDashboard);
 
             var statsRow = new TableLayoutPanel
             {
-                Left = 0, Top = 0, Width = 900, Height = 130,
+                Left = 0, Top = 0, Width = 900, Height = 110,
                 ColumnCount = 4, RowCount = 1,
                 Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
                 BackColor = Color.Transparent, Padding = new Padding(0),
@@ -536,10 +393,10 @@ namespace CMS.Views
             for (int i = 0; i < 4; i++) statsRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
             statsRow.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-            _scTotal    = new StatCard { StatLabel = "Total Components", AccentColor = Theme.Accent,  Dock = DockStyle.Fill, Margin = new Padding(0,0,12,0) };
-            _scApproved = new StatCard { StatLabel = "Approved",         AccentColor = Color.FromArgb(109,109,108),  Dock = DockStyle.Fill, Margin = new Padding(0,0,12,0) };
-            _scPending  = new StatCard { StatLabel = "Pending Review",   AccentColor = Color.FromArgb(140,140,140),  Dock = DockStyle.Fill, Margin = new Padding(0,0,12,0) };
-            _scCats     = new StatCard { StatLabel = "Categories",       AccentColor = Color.FromArgb(0,120,115),  Dock = DockStyle.Fill, Margin = new Padding(0) };
+            _scTotal    = new StatCard { StatLabel = "Total Components", AccentColor = Color.FromArgb(79,124,255),  Dock = DockStyle.Fill, Margin = new Padding(0,0,12,0) };
+            _scApproved = new StatCard { StatLabel = "Approved",         AccentColor = Color.FromArgb(32,193,148),  Dock = DockStyle.Fill, Margin = new Padding(0,0,12,0) };
+            _scPending  = new StatCard { StatLabel = "Pending Review",   AccentColor = Color.FromArgb(245,158,11),  Dock = DockStyle.Fill, Margin = new Padding(0,0,12,0) };
+            _scCats     = new StatCard { StatLabel = "Categories",       AccentColor = Color.FromArgb(168,85,247),  Dock = DockStyle.Fill, Margin = new Padding(0) };
 
             statsRow.Controls.Add(_scTotal, 0, 0); statsRow.Controls.Add(_scApproved, 1, 0);
             statsRow.Controls.Add(_scPending, 2, 0); statsRow.Controls.Add(_scCats, 3, 0);
@@ -547,17 +404,17 @@ namespace CMS.Views
 
             var chartsRow = new TableLayoutPanel
             {
-                Left = 0, Top = 154, Width = 900, Height = 480,
+                Left = 0, Top = 118, Width = 900, Height = 300,
                 ColumnCount = 2, RowCount = 1,
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom,
                 BackColor = Color.Transparent, Padding = new Padding(0),
             };
-            chartsRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 68));
-            chartsRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 32));
+            chartsRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+            chartsRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
             chartsRow.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
 
-            _catChart = new CardPanel { Dock = DockStyle.Fill, Margin = new Padding(0,0,16,0), Padding = new Padding(4, 4, 4, 12) };
-            _mfrChart = new CardPanel { Dock = DockStyle.Fill, Margin = new Padding(0), Padding = new Padding(4, 4, 4, 12) };
+            _catChart = new Panel { Dock = DockStyle.Fill, BackColor = Theme.BgSurface, Margin = new Padding(0,0,12,0) };
+            _mfrChart = new Panel { Dock = DockStyle.Fill, BackColor = Theme.BgSurface, Margin = new Padding(0) };
             chartsRow.Controls.Add(_catChart, 0, 0);
             chartsRow.Controls.Add(_mfrChart, 1, 0);
             _pageDashboard.Controls.Add(chartsRow);
@@ -574,8 +431,10 @@ namespace CMS.Views
             void ResizeDashboard()
             {
                 int w = _pageDashboard.ClientSize.Width;
+                int h = _pageDashboard.ClientSize.Height;
                 statsRow.Width   = w;
                 chartsRow.Width  = w;
+                chartsRow.Height = Math.Max(200, h - 118 - 8);
             }
 
             _pageDashboard.Resize += (s, e) => ResizeDashboard();
@@ -668,10 +527,8 @@ namespace CMS.Views
             };
             grid.AutoGenerateColumns = false;
             grid.DefaultCellStyle = new DataGridViewCellStyle { BackColor = Theme.BgSurface, ForeColor = Theme.TextPrimary, SelectionBackColor = Theme.AccentLight, SelectionForeColor = Theme.Accent };
-            grid.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle { BackColor = Theme.BgSurface, ForeColor = Theme.TextSecondary, Font = new Font("Segoe UI",8.5f,FontStyle.Bold) };
+            grid.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle { BackColor = Color.FromArgb(243,246,250), ForeColor = Theme.TextSecondary, Font = new Font("Segoe UI",8.5f,FontStyle.Bold) };
             grid.EnableHeadersVisualStyles = false;
-            grid.CellBorderStyle = DataGridViewCellBorderStyle.None;
-            grid.RowTemplate.Height = 40;
             grid.Columns.Add(new DataGridViewTextBoxColumn { Name="Category",    HeaderText="Category",    Width=80,  DataPropertyName="Category"    });
             grid.Columns.Add(new DataGridViewTextBoxColumn { Name="Description", HeaderText="Description", Width=200, AutoSizeMode=DataGridViewAutoSizeColumnMode.Fill, DataPropertyName="Description" });
             grid.Columns.Add(new DataGridViewTextBoxColumn { Name="PartNumber",  HeaderText="Part No",     Width=130, DataPropertyName="PartNumber"   });
@@ -724,10 +581,8 @@ namespace CMS.Views
             };
             grid.AutoGenerateColumns = false;
             grid.DefaultCellStyle = new DataGridViewCellStyle { BackColor=Theme.BgSurface, ForeColor=Theme.TextPrimary, SelectionBackColor=Theme.AccentLight, SelectionForeColor=Theme.Accent };
-            grid.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle { BackColor=Theme.BgSurface, ForeColor=Theme.TextSecondary, Font=new Font("Segoe UI",8.5f,FontStyle.Bold) };
+            grid.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle { BackColor=Color.FromArgb(243,246,250), ForeColor=Theme.TextSecondary, Font=new Font("Segoe UI",8.5f,FontStyle.Bold) };
             grid.EnableHeadersVisualStyles = false;
-            grid.CellBorderStyle = DataGridViewCellBorderStyle.None;
-            grid.RowTemplate.Height = 40;
             grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText="Category", Width=120, DataPropertyName="Cat" });
             grid.Columns.Add(new DataGridViewTextBoxColumn { HeaderText="Count",    Width=80,  DataPropertyName="Cnt", AutoSizeMode=DataGridViewAutoSizeColumnMode.Fill });
 
@@ -756,9 +611,9 @@ namespace CMS.Views
             _catChart.Controls.Clear();
             _catChart.Paint -= null!;
 
-            const int SCROLL_PAD_LEFT = 16;
-            const int CAT_W           = 90;
-            const int NUM_W           = 85;
+            const int SCROLL_PAD_LEFT = 6;
+            const int CAT_W           = 60;
+            const int NUM_W           = 50;
             const int NUM_GAP         = 4;
             const int trackLeft       = CAT_W + 6;
             const int barH            = 8;
@@ -772,19 +627,19 @@ namespace CMS.Views
             var title = new Label
             {
                 Text = "Components by Category",
-                Font = Theme.FontH2,
+                Font = new Font("Segoe UI", 9.5f, FontStyle.Bold),
                 ForeColor = Theme.TextSecondary,
-                AutoSize = false, Dock = DockStyle.Top, Height = 60,
-                Padding = new Padding(12, 10, 0, 0),
-                BackColor = Color.Transparent
+                AutoSize = false, Dock = DockStyle.Top, Height = 36,
+                Padding = new Padding(8, 10, 0, 0),
+                BackColor = Theme.BgSurface
             };
 
-            var hdrPanel = new Panel { Dock = DockStyle.Top, Height = 42, BackColor = Color.Transparent };
-            hdrPanel.Controls.Add(new Label { Text = "Total", Left = numStartInRow, Top = 10, Width = NUM_W, Height = 22, Font = Theme.FontSmall, ForeColor = Theme.Accent, AutoSize = false, TextAlign = ContentAlignment.MiddleCenter });
-            hdrPanel.Controls.Add(new Label { Text = "Approved", Left = numStartInRow + NUM_W + NUM_GAP, Top = 10, Width = NUM_W, Height = 22, Font = Theme.FontSmall, ForeColor = Color.FromArgb(109, 109, 108), AutoSize = false, TextAlign = ContentAlignment.MiddleCenter });
-            hdrPanel.Controls.Add(new Label { Text = "Pending",  Left = numStartInRow + (NUM_W + NUM_GAP) * 2, Top = 10, Width = NUM_W, Height = 22, Font = Theme.FontSmall, ForeColor = Color.FromArgb(160, 160, 160), AutoSize = false, TextAlign = ContentAlignment.MiddleCenter });
+            var hdrPanel = new Panel { Dock = DockStyle.Top, Height = 32, BackColor = Theme.BgSurface };
+            hdrPanel.Controls.Add(new Label { Text = "Total", Left = numStartInRow + SCROLL_PAD_LEFT, Top = 20, Width = NUM_W, Height = 14, Font = new Font("Segoe UI", 7f, FontStyle.Bold), ForeColor = Theme.Accent, AutoSize = false, TextAlign = ContentAlignment.MiddleCenter });
+            hdrPanel.Controls.Add(new Label { Text = "App",   Left = numStartInRow + SCROLL_PAD_LEFT + NUM_W + NUM_GAP, Top = 20, Width = NUM_W, Height = 14, Font = new Font("Segoe UI", 7f, FontStyle.Bold), ForeColor = Theme.AccentGreen, AutoSize = false, TextAlign = ContentAlignment.MiddleCenter });
+            hdrPanel.Controls.Add(new Label { Text = "Pend",  Left = numStartInRow + SCROLL_PAD_LEFT + (NUM_W + NUM_GAP) * 2, Top = 20, Width = NUM_W, Height = 14, Font = new Font("Segoe UI", 7f, FontStyle.Bold), ForeColor = Color.FromArgb(245, 158, 11), AutoSize = false, TextAlign = ContentAlignment.MiddleCenter });
 
-            var scroll = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent, AutoScroll = true, Padding = new Padding(SCROLL_PAD_LEFT, 2, 2, 8) };
+            var scroll = new Panel { Dock = DockStyle.Fill, BackColor = Theme.BgSurface, AutoScroll = true, Padding = new Padding(SCROLL_PAD_LEFT, 2, 2, 8) };
             _catChart.Controls.Add(scroll);
             _catChart.Controls.Add(hdrPanel);
             _catChart.Controls.Add(title);
@@ -799,15 +654,14 @@ namespace CMS.Views
             if (max == 0) max = 1;
 
             int yPos = 0;
-            var topCats = sorted.Take(7).ToList();
-            foreach (var (cat, total) in topCats)
+            foreach (var (cat, total) in sorted)
             {
                 int approved = allComps.Count(c => c.Category != null && c.Category.Trim().ToUpper() == cat.Trim().ToUpper() && c.Status == ComponentStatus.Approved);
                 int pending  = allComps.Count(c => c.Category != null && c.Category.Trim().ToUpper() == cat.Trim().ToUpper() && c.Status == ComponentStatus.Pending);
 
                 int rowWidth = numStartInRow + (NUM_W + NUM_GAP) * 3 + 16;
                 var row = new Panel { Left = 0, Top = yPos, Width = rowWidth, Height = rowH, BackColor = Color.Transparent };
-                row.Controls.Add(new Label { Text = cat, Left = 0, Top = (rowH - 20) / 2, Width = CAT_W, Height = 20, ForeColor = Theme.TextSecondary, Font = new Font("Segoe UI", 9f), AutoSize = false, TextAlign = ContentAlignment.MiddleRight });
+                row.Controls.Add(new Label { Text = cat, Left = 0, Top = (rowH - 16) / 2, Width = CAT_W, Height = 16, ForeColor = Theme.TextSecondary, Font = Theme.FontSmall, AutoSize = false, TextAlign = ContentAlignment.MiddleRight });
 
                 int totalFillW = total    > 0 ? Math.Max(10, (int)(BAR_MAX * (double)total    / max)) : 0;
                 int apprFillW  = approved > 0 ? Math.Max(10, (int)(BAR_MAX * (double)approved / max)) : 0;
@@ -818,41 +672,41 @@ namespace CMS.Views
                 row.Controls.Add(trackTotal);
 
                 var trackAppr = new Panel { Left = trackLeft, Top = 15, Width = BAR_MAX, Height = barH, BackColor = Theme.BgSurface3 };
-                if (apprFillW > 0) trackAppr.Controls.Add(new Panel { Width = apprFillW, Height = barH, BackColor = Color.FromArgb(109, 109, 108) });
+                if (apprFillW > 0) trackAppr.Controls.Add(new Panel { Width = apprFillW, Height = barH, BackColor = Theme.AccentGreen });
                 row.Controls.Add(trackAppr);
 
                 var trackPend = new Panel { Left = trackLeft, Top = 26, Width = BAR_MAX, Height = barH, BackColor = Theme.BgSurface3 };
-                if (pendFillW > 0) trackPend.Controls.Add(new Panel { Width = pendFillW, Height = barH, BackColor = Color.FromArgb(160, 160, 160) });
+                if (pendFillW > 0) trackPend.Controls.Add(new Panel { Width = pendFillW, Height = barH, BackColor = Color.FromArgb(245, 158, 11) });
                 row.Controls.Add(trackPend);
 
-                int numY = (rowH / 2) - 10;
-                row.Controls.Add(new Label { Text = total.ToString(),    Left = numStartInRow,                          Top = numY, Width = NUM_W, Height = 20, ForeColor = total    > 0 ? Theme.TextSecondary : Color.FromArgb(40, Theme.TextPrimary), Font = new Font("Segoe UI", 9f), AutoSize = false, TextAlign = ContentAlignment.MiddleCenter });
-                row.Controls.Add(new Label { Text = approved.ToString(), Left = numStartInRow + NUM_W + NUM_GAP,        Top = numY, Width = NUM_W, Height = 20, ForeColor = approved > 0 ? Theme.AccentGreen   : Color.FromArgb(40, Theme.TextPrimary), Font = new Font("Segoe UI", 9f), AutoSize = false, TextAlign = ContentAlignment.MiddleCenter });
-                row.Controls.Add(new Label { Text = pending.ToString(),  Left = numStartInRow + (NUM_W + NUM_GAP) * 2, Top = numY, Width = NUM_W, Height = 20, ForeColor = pending  > 0 ? Theme.Warning       : Color.FromArgb(40, Theme.TextPrimary), Font = new Font("Segoe UI", 9f), AutoSize = false, TextAlign = ContentAlignment.MiddleCenter });
+                int numY = (rowH / 2) - 7;
+                row.Controls.Add(new Label { Text = total.ToString(),    Left = numStartInRow,                          Top = numY, Width = NUM_W, Height = 14, ForeColor = total    > 0 ? Theme.Accent                 : Theme.TextMuted, Font = Theme.FontSmall, AutoSize = false, TextAlign = ContentAlignment.MiddleCenter });
+                row.Controls.Add(new Label { Text = approved.ToString(), Left = numStartInRow + NUM_W + NUM_GAP,        Top = numY, Width = NUM_W, Height = 14, ForeColor = approved > 0 ? Theme.AccentGreen            : Theme.TextMuted, Font = Theme.FontSmall, AutoSize = false, TextAlign = ContentAlignment.MiddleCenter });
+                row.Controls.Add(new Label { Text = pending.ToString(),  Left = numStartInRow + (NUM_W + NUM_GAP) * 2, Top = numY, Width = NUM_W, Height = 14, ForeColor = pending  > 0 ? Color.FromArgb(245, 158, 11) : Theme.TextMuted, Font = Theme.FontSmall, AutoSize = false, TextAlign = ContentAlignment.MiddleCenter });
 
                 scroll.Controls.Add(row);
                 yPos += rowH;
             }
 
-            if (sorted.Count > 7)
+            _catChart.Paint += (s, e) =>
             {
-                var viewAllBtn = new ModernButton { Text = "View All Categories", Left = 16, Top = yPos + 24, Width = 160, Height = 34, Font = Theme.FontSmall, CustomBgColor = Theme.BgSurface, ForeColor = Theme.Accent };
-                viewAllBtn.Click += (s, e) => Navigate("catmanager");
-                scroll.Controls.Add(viewAllBtn);
-            }
+                e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                using var pen = new Pen(Theme.Border, 1);
+                e.Graphics.DrawRectangle(pen, 0, 0, _catChart.Width - 1, _catChart.Height - 1);
+            };
         }
 
         private void BuildManufacturerChart(Dictionary<string, int> data)
         {
             _mfrChart.Controls.Clear();
             _mfrChart.Paint -= null!;
-            var scroll = new Panel { Dock = DockStyle.Fill, BackColor = Color.Transparent, AutoScroll = true, Padding = new Padding(20, 8, 16, 12) };
-            _mfrChart.Controls.Add(scroll);
-            var title = new Label { Text = "Top Manufacturers", Font = Theme.FontH2, ForeColor = Theme.TextSecondary, AutoSize = false, Dock = DockStyle.Top, Height = 60, Padding = new Padding(20,10,0,0), BackColor = Color.Transparent };
+            var title = new Label { Text = "Top Manufacturers", Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), ForeColor = Theme.TextSecondary, AutoSize = false, Dock = DockStyle.Top, Height = 40, Padding = new Padding(16,12,0,0), BackColor = Theme.BgSurface };
             _mfrChart.Controls.Add(title);
+            var scroll = new Panel { Dock = DockStyle.Fill, BackColor = Theme.BgSurface, AutoScroll = true, Padding = new Padding(16,4,16,12) };
+            _mfrChart.Controls.Add(scroll);
             var sorted = data.OrderByDescending(kvp => kvp.Value).ToList();
             int max = sorted.Count > 0 ? sorted[0].Value : 1;
-            Color[] barColors = { Theme.Accent, Color.FromArgb(0, 140, 134), Color.FromArgb(0, 120, 115), Color.FromArgb(109, 109, 108), Color.FromArgb(140, 140, 140), Color.FromArgb(170, 170, 170) };
+            Color[] barColors = { Theme.AccentGreen, Theme.Accent, Color.FromArgb(168,85,247), Theme.Warning, Theme.Danger };
             var flow = new FlowLayoutPanel { Dock = DockStyle.Top, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoSize = true, BackColor = Color.Transparent, Padding = new Padding(0) };
             scroll.Controls.Add(flow);
             int idx = 0;
@@ -869,6 +723,7 @@ namespace CMS.Views
                 flow.Controls.Add(row);
                 idx++;
             }
+            _mfrChart.Paint += (s, e) => { e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias; using var pen = new Pen(Theme.Border,1); e.Graphics.DrawRectangle(pen,0,0,_mfrChart.Width-1,_mfrChart.Height-1); };
         }
 
         // ══════════════════════════════════════════════════════════════════
@@ -879,91 +734,41 @@ namespace CMS.Views
             _pageCatalog = new Panel { Dock = DockStyle.Fill, BackColor = Theme.BgMain, Visible = false };
             _content.Controls.Add(_pageCatalog);
 
-            var filterBar = new TableLayoutPanel 
-            { 
-                Dock = DockStyle.Top, Height = 56, BackColor = Theme.BgSurface,
-                ColumnCount = 7, RowCount = 1,
-                Padding = new Padding(12, 10, 12, 10)
-            };
-            filterBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25)); // Search
-            filterBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 18)); // Cat
-            filterBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 12)); // Rating
-            filterBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 12)); // Proc
-            filterBar.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 18)); // Mfr
-            filterBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90)); // Clear
-            filterBar.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130)); // Add Col
-            filterBar.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-
+            var filterBar = new Panel { Left = 0, Top = 0, Height = 52, BackColor = Theme.BgSurface, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
             filterBar.Paint += (s, e) => e.Graphics.DrawLine(new Pen(Theme.Border, 1), 0, filterBar.Height-1, filterBar.Width, filterBar.Height-1);
             _pageCatalog.Controls.Add(filterBar);
 
-            _searchBox = new TextBox { Dock = DockStyle.Fill, Margin = new Padding(4), BorderStyle = BorderStyle.FixedSingle, Font = Theme.FontBody, BackColor = Theme.BgSurface2, ForeColor = Theme.TextPrimary, PlaceholderText = "Search by description, part no..." };
-            _searchBox.TextChanged += (s, e) => RefreshCatalog();
-            Theme.MakeRounded(_searchBox, 6);
-            filterBar.Controls.Add(_searchBox.Parent!, 0, 0);
+            _ = new Label { Text = "", Left = 10, Top = 14, AutoSize = true, Font = new Font("Segoe UI", 10f), BackColor = Color.Transparent, Parent = filterBar };
 
-            _filterCat = MakeCombo(0, 0, 100, null!, "All Categories");
-            _filterCat.Dock = DockStyle.Fill;
-            _filterCat.Margin = new Padding(4);
+            _searchBox = new TextBox { Left = 34, Top = 11, Width = 210, Height = 28, BorderStyle = BorderStyle.FixedSingle, Font = Theme.FontBody, BackColor = Theme.BgSurface2, ForeColor = Theme.TextPrimary, PlaceholderText = "Search by description, part no, manufacturer...", Parent = filterBar };
+            _searchBox.TextChanged += (s, e) => RefreshCatalog();
+
+            _filterCat = MakeCombo(252, 11, 120, filterBar, "All Categories");
             var sortedCats = ComponentRepository.AllCategories.OrderBy(c => c).ToArray();
             _filterCat.Items.AddRange(sortedCats.Cast<object>().ToArray());
             _filterCat.SelectedIndexChanged += (s, e) => RefreshCatalog();
-            Theme.MakeRounded(_filterCat, 6);
-            filterBar.Controls.Add(_filterCat.Parent!, 1, 0);
 
-            _filterRating = MakeCombo(0, 0, 100, null!, "All Ratings");
-            _filterRating.Dock = DockStyle.Fill;
-            _filterRating.Margin = new Padding(4);
+            _filterRating = MakeCombo(380, 11, 95, filterBar, "All Ratings");
             _filterRating.Items.AddRange(new object[] { "STD", "AECQ" });
             _filterRating.SelectedIndexChanged += (s, e) => RefreshCatalog();
-            Theme.MakeRounded(_filterRating, 6);
-            filterBar.Controls.Add(_filterRating.Parent!, 2, 0);
 
-            _filterProc = MakeCombo(0, 0, 100, null!, "All Processes");
-            _filterProc.Dock = DockStyle.Fill;
-            _filterProc.Margin = new Padding(4);
+            _filterProc = MakeCombo(483, 11, 90, filterBar, "All Processes");
             _filterProc.Items.AddRange(new object[] { "SMD", "THT" });
             _filterProc.SelectedIndexChanged += (s, e) => RefreshCatalog();
-            Theme.MakeRounded(_filterProc, 6);
-            filterBar.Controls.Add(_filterProc.Parent!, 3, 0);
 
-            _filterMfr = MakeCombo(0, 0, 100, null!, "All Manufacturers");
-            _filterMfr.Dock = DockStyle.Fill;
-            _filterMfr.Margin = new Padding(4);
+            _filterMfr = MakeCombo(581, 11, 150, filterBar, "All Manufacturers");
             _filterMfr.SelectedIndexChanged += (s, e) => RefreshCatalog();
-            Theme.MakeRounded(_filterMfr, 6);
-            filterBar.Controls.Add(_filterMfr.Parent!, 4, 0);
 
-            var btnClear = new ModernButton { Text = "Clear", Style = ModernButton.BtnStyle.Secondary, Dock = DockStyle.Fill, Margin = new Padding(4) };
+            var btnClear = new ModernButton { Text = "Clear Filters", Style = ModernButton.BtnStyle.Secondary, Width = 100, Height = 28, Left = 739, Top = 12, Parent = filterBar };
             btnClear.Click += (s, e) =>
             {
                 _searchBox.Text = "";
                 _filterCat.SelectedIndex = _filterRating.SelectedIndex = _filterProc.SelectedIndex = _filterMfr.SelectedIndex = 0;
                 RefreshCatalog();
-                
             };
-            filterBar.Controls.Add(btnClear, 5, 0);
 
-            var btnAddCol = new ModernButton
-            {
-                Text = "+ Add Column",
-                Style = ModernButton.BtnStyle.Secondary,
-                Dock = DockStyle.Fill,
-                Margin = new Padding(4)
-            };
-            btnAddCol.Click += (s, e) =>
-            {
-                string colName = Microsoft.VisualBasic.Interaction.InputBox(
-                    "Enter column name:", "Add Custom Column", "");
-                if (string.IsNullOrWhiteSpace(colName)) return;
-                colName = colName.Trim();
-                if (_grid.Columns.Contains(colName))
-                { MessageBox.Show("This column already exists.", "Warning",
-                    MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
-                ComponentRepository.AddCustomColumn(colName);
-                AddCustomColumnToGrid(colName);
-            };
-            filterBar.Controls.Add(btnAddCol, 6, 0);
+            filterBar.Width = _pageCatalog.ClientSize.Width;
+            _pageCatalog.Resize += (s, e) => filterBar.Width = _pageCatalog.ClientSize.Width;
 
             _lblCount = new Label { Left = 8, Top = 58, AutoSize = true, Font = Theme.FontSmall, ForeColor = Theme.TextMuted, BackColor = Color.Transparent, Parent = _pageCatalog };
 
@@ -980,7 +785,7 @@ namespace CMS.Views
 
             _pageCatalog.Resize += (s, e) =>
             {
-                _grid.Height = _pageCatalog.ClientSize.Height - _grid.Top;
+                _grid.Height = _pageCatalog.ClientSize.Height - 76;
                 RepositionDetailPanel();
             };
 
@@ -992,31 +797,10 @@ namespace CMS.Views
 
             _grid.ColumnHeaderMouseClick += (s, e) =>
             {
-                if (e.Button == MouseButtons.Right)
-    {
-        string clickedCol = _grid.Columns[e.ColumnIndex].Name;
-        if (ComponentRepository.CustomColumns.Contains(clickedCol))
-        {
-            var ctx = new ContextMenuStrip();
-            ctx.Items.Add($"Delete Column: \"{clickedCol}\"", null, (_, __) =>
-            {
-                if (MessageBox.Show($"Delete column \"{clickedCol}\"?\nAll data in this column will be lost.",
-                    "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
-                {
-                    ComponentRepository.RemoveCustomColumn(clickedCol);
-                    if (_grid.Columns.Contains(clickedCol))
-                        _grid.Columns.Remove(clickedCol);
-                }
-            });
-            ctx.Show(_grid, _grid.PointToClient(Cursor.Position));
-        }
-        return;
-    }
-    // Sol tık → sütun seçimi (mevcut davranış)
-    _grid.ClearSelection();
-    int colIdx = e.ColumnIndex;
-    foreach (DataGridViewRow row in _grid.Rows)
-        if (!row.IsNewRow) row.Cells[colIdx].Selected = true;
+                _grid.ClearSelection();
+                int colIdx = e.ColumnIndex;
+                foreach (DataGridViewRow row in _grid.Rows)
+                    if (!row.IsNewRow) row.Cells[colIdx].Selected = true;
             };
         }
 
@@ -1308,37 +1092,34 @@ namespace CMS.Views
         {
             var g = new DataGridView
             {
-                AllowUserToAddRows = false, AllowUserToDeleteRows = false,
+                ReadOnly = true, AllowUserToAddRows = false, AllowUserToDeleteRows = false,
                 RowHeadersVisible = false, MultiSelect = true,
-                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+                SelectionMode = DataGridViewSelectionMode.CellSelect,
                 AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.None,
-                RowTemplate = { Height = 48 },
+                RowTemplate = { Height = 30 },
                 BackgroundColor = Theme.BgSurface, BorderStyle = BorderStyle.None,
-                CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal,
                 GridColor = Theme.Border, Font = Theme.FontBody,
-                ColumnHeadersHeight = 44,
+                ColumnHeadersHeight = 34,
                 ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing,
-                ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None,
                 ClipboardCopyMode = DataGridViewClipboardCopyMode.EnableWithoutHeaderText,
             };
-            typeof(DataGridView).InvokeMember("DoubleBuffered", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.SetProperty, null, g, new object[] { true });
             g.AutoGenerateColumns = false;
-            g.DefaultCellStyle                = new DataGridViewCellStyle { BackColor=Theme.BgSurface, ForeColor=Theme.TextPrimary, SelectionBackColor=Theme.AccentLight, SelectionForeColor=Theme.Accent, Padding=new Padding(16,0,16,0) };
-            g.AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle { BackColor=Theme.BgSurface2, ForeColor=Theme.TextPrimary, SelectionBackColor=Theme.AccentLight, SelectionForeColor=Theme.Accent, Padding=new Padding(16,0,16,0) };
-            g.ColumnHeadersDefaultCellStyle   = new DataGridViewCellStyle { BackColor=Theme.BgSurface, ForeColor=Theme.TextSecondary, Font=new Font("Segoe UI",9f,FontStyle.Bold), SelectionBackColor=Theme.BgSurface, SelectionForeColor=Theme.TextSecondary, Padding=new Padding(16,0,16,0) };
+            g.DefaultCellStyle                = new DataGridViewCellStyle { BackColor=Theme.BgSurface, ForeColor=Theme.TextPrimary, SelectionBackColor=Theme.AccentLight, SelectionForeColor=Theme.Accent, Padding=new Padding(4,0,4,0) };
+            g.AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle { BackColor=Color.FromArgb(248,250,252), ForeColor=Theme.TextPrimary, SelectionBackColor=Theme.AccentLight, SelectionForeColor=Theme.Accent, Padding=new Padding(4,0,4,0) };
+            g.ColumnHeadersDefaultCellStyle   = new DataGridViewCellStyle { BackColor=Color.FromArgb(243,246,250), ForeColor=Theme.TextSecondary, Font=new Font("Segoe UI",8.5f,FontStyle.Bold), SelectionBackColor=Color.FromArgb(243,246,250), SelectionForeColor=Theme.TextSecondary, Padding=new Padding(4,0,4,0) };
 
             var cols = new[]
             {
-                ("FekaNo",       "FekaNo",       130, false),
-                ("ID",           "ID",            50,  false),
-                ("Category",     "Category",      95,  false),
+                ("FekaNo",       "FekaNo",       110, false),
+                ("ID",           "ID",            55,  false),
+                ("Category",     "Category",      90,  false),
                 ("Description",  "Description",   300, true),
-                ("PartNumber",   "Part Number",   170, false),
-                ("Manufacturer", "Manufacturer",  145, false),
-                ("Footprint",    "Footprint",     135, false),
-                ("Rating",       "Rating",        85,  false),
-                ("Process",      "Process",       85,  false),
-                ("Status",       "Status",        100,  false),
+                ("PartNumber",   "Part Number",   165, false),
+                ("Manufacturer", "Manufacturer",  130, false),
+                ("Footprint",    "Footprint",     125, false),
+                ("Rating",       "Rating",        70,  false),
+                ("Process",      "Process",       70,  false),
+                ("Status",       "Status",        90,  false),
             };
             foreach (var (name, hdr, w, fill) in cols)
                 g.Columns.Add(new DataGridViewTextBoxColumn { Name=name, HeaderText=hdr, DataPropertyName=name, Width=w, AutoSizeMode=fill?DataGridViewAutoSizeColumnMode.Fill:DataGridViewAutoSizeColumnMode.None, SortMode=DataGridViewColumnSortMode.NotSortable });
@@ -1352,27 +1133,15 @@ namespace CMS.Views
         {
             var grid = sender as DataGridView;
             if (grid == null) return;
-            
-            bool isSelected = grid.Rows[e.RowIndex].Selected;
-            
             if (grid.Columns[e.ColumnIndex].Name == "Status" && e.Value != null)
-            { 
-                e.CellStyle.ForeColor = e.Value.ToString()=="Approved" ? Color.FromArgb(52, 211, 153) : Color.FromArgb(252, 211, 77); 
-                e.CellStyle.SelectionForeColor = e.CellStyle.ForeColor; 
-                e.CellStyle.Font = new Font("Segoe UI",8.5f,FontStyle.Bold); 
-            }
+            { e.CellStyle.ForeColor = e.Value.ToString()=="Approved" ? Theme.AccentGreen : Theme.Warning; e.CellStyle.Font = new Font("Segoe UI",8.5f,FontStyle.Bold); }
             if (grid.Columns[e.ColumnIndex].Name == "Rating" && e.Value != null)
-            { 
-                e.CellStyle.ForeColor = e.Value.ToString()=="AECQ" ? Theme.Accent : Theme.TextSecondary; 
-                if (isSelected && e.Value.ToString()!="AECQ") e.CellStyle.SelectionForeColor = Theme.Accent;
-                e.CellStyle.Font = new Font("Segoe UI",8.5f,FontStyle.Bold); 
-            }
+            { e.CellStyle.ForeColor = e.Value.ToString()=="AECQ" ? Theme.Accent : Theme.TextSecondary; e.CellStyle.Font = new Font("Segoe UI",8.5f,FontStyle.Bold); }
         }
 
         private bool _refreshing = false;
         private void RefreshCatalog()
         {
-            
             if (_refreshing) return;
             _refreshing = true;
             try
@@ -1397,86 +1166,33 @@ namespace CMS.Views
                 if (_lblCount != null) _lblCount.Text = $"{results.Count:N0} component{(results.Count!=1?"s":"")} found";
 
                 var table = new System.Data.DataTable();
-foreach (var col in new[]{"FekaNo","ID","Category","Description","PartNumber","Manufacturer","Footprint","Rating","Process","Status"})
-    table.Columns.Add(col);
-foreach (var customCol in ComponentRepository.CustomColumns)
-    if (!table.Columns.Contains(customCol))
-        table.Columns.Add(customCol);
+                foreach (var col in new[]{"FekaNo","ID","Category","Description","PartNumber","Manufacturer","Footprint","Rating","Process","Status"})
+                    table.Columns.Add(col);
+                foreach (var gf in ComponentRepository.GlobalFields)
+                    if (!table.Columns.Contains(gf.Key)) table.Columns.Add(gf.Key);
+                foreach (var c in results)
+                {
+                    var row = table.NewRow();
+                    row["FekaNo"] = c.FekaNo; row["ID"] = c.Id; row["Category"] = c.Category;
+                    row["Description"] = c.Description; row["PartNumber"] = c.PartNumber;
+                    row["Manufacturer"] = c.Manufacturer; row["Footprint"] = c.Footprint;
+                    row["Rating"] = c.Rating; row["Process"] = c.Process; row["Status"] = c.Status;
+                    foreach (var gf in ComponentRepository.GlobalFields)
+                        if (c.ExtraFields.TryGetValue(gf.Key, out var val)) row[gf.Key] = val;
+                    table.Rows.Add(row);
+                }
 
-foreach (var c in results)
-{
-    var row = table.NewRow();
-    row["FekaNo"]       = c.FekaNo;
-    row["ID"]           = c.Id;
-    row["Category"]     = c.Category;
-    row["Description"]  = c.Description;
-    row["PartNumber"]   = c.PartNumber;
-    row["Manufacturer"] = c.Manufacturer;
-    row["Footprint"]    = c.Footprint;
-    row["Rating"]       = c.Rating;
-    row["Process"]      = c.Process;
-    row["Status"]       = c.Status;
-    foreach (var customCol in ComponentRepository.CustomColumns)
-        row[customCol] = c.ExtraFields.TryGetValue(customCol, out var val) ? val : "";
-    table.Rows.Add(row);
-}
-
-if (_grid != null)
-{
-    // Custom sütunları grid'e ekle (henüz yoksa)
-    foreach (var customCol in ComponentRepository.CustomColumns)
-        AddCustomColumnToGrid(customCol);
-
-    _grid.DataSource = table;
-    // ... (mevcut SetW çağrıları aynen kalacak)
-}
                 if (_grid != null)
                 {
                     _grid.DataSource = table;
                     void SetW(string col, int w) { if (_grid.Columns[col] != null) _grid.Columns[col]!.Width = w; }
-                    SetW("FekaNo",130); SetW("ID",50); SetW("Category",95); SetW("PartNumber",170);
-                    SetW("Manufacturer",145); SetW("Footprint",135); SetW("Rating",85); SetW("Process",85); SetW("Status",100);
+                    SetW("FekaNo",110); SetW("ID",45); SetW("Category",80); SetW("PartNumber",165);
+                    SetW("Manufacturer",130); SetW("Footprint",125); SetW("Rating",70); SetW("Process",70); SetW("Status",90);
                 }
             }
             catch (Exception ex) { MessageBox.Show($"Failed to load catalog:\n\n{ex.Message}\n\nStack:\n{ex.StackTrace}", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
             finally { _refreshing = false; }
         }
-        private void AddCustomColumnToGrid(string colName)
-{
-    if (_grid.Columns.Contains(colName)) return;
-
-    var col = new DataGridViewTextBoxColumn
-    {
-        Name = colName,
-        HeaderText = colName,
-        DataPropertyName = colName,
-        Width = 120,
-        SortMode = DataGridViewColumnSortMode.NotSortable,
-        ReadOnly = false,
-    };
-    _grid.Columns.Add(col);
-
-    // Edit bitince kaydet
-    _grid.CellEndEdit -= Grid_CellEndEdit;
-    _grid.CellEndEdit += Grid_CellEndEdit;
-}
-
-private void Grid_CellEndEdit(object? sender, DataGridViewCellEventArgs e)
-{
-    if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
-    var col = _grid.Columns[e.ColumnIndex];
-    if (!ComponentRepository.CustomColumns.Contains(col.Name)) return;
-
-    var row = _grid.Rows[e.RowIndex];
-    if (!int.TryParse(row.Cells["ID"].Value?.ToString(), out int id)) return;
-
-    var comp = ComponentRepository.GetAll().FirstOrDefault(c => c.Id == id);
-    if (comp == null) return;
-
-    string newVal = row.Cells[e.ColumnIndex].Value?.ToString() ?? "";
-    comp.ExtraFields[col.Name] = newVal;
-    ComponentRepository.Update(comp);
-}
 
         private void GridApprove()
         {
@@ -1518,61 +1234,60 @@ private void Grid_CellEndEdit(object? sender, DataGridViewCellEventArgs e)
             _pageAdd = new Panel { Dock = DockStyle.Fill, BackColor = Theme.BgMain, Visible = false, AutoScroll = true };
             _content.Controls.Add(_pageAdd);
 
-            var card = new CardPanel { Radius = 12, Top=16, Width=720, CardColor=Theme.BgSurface, AutoSize=false, Anchor=AnchorStyles.Top, Padding=new Padding(32,28,32,28) };
+            var card = new Panel { Top=16, Width=720, BackColor=Theme.BgSurface, AutoSize=false, Anchor=AnchorStyles.Top, Padding=new Padding(32,28,32,28) };
             card.Left = Math.Max(0, (_pageAdd.ClientSize.Width - card.Width) / 2);
+            card.Paint += (s, e) => { using var pen = new Pen(Theme.Border,1); e.Graphics.DrawRectangle(pen,0,0,card.Width-1,card.Height-1); };
             _pageAdd.Controls.Add(card);
             _pageAdd.Resize += (s, e) => { card.Width = Math.Min(720, _pageAdd.ClientSize.Width); card.Left = Math.Max(0, (_pageAdd.ClientSize.Width-card.Width)/2); };
 
-            int y=28, lw=150, fw=480, lh=28, fh=32;
-            Label L(string text, int top) => new Label { Text=text, Left=40, Top=top, Width=lw, Height=lh, Font=Theme.FontBold, ForeColor=Theme.TextSecondary, TextAlign=ContentAlignment.MiddleLeft, BackColor=Color.Transparent, Parent=card };
-            TextBox TB(int top) { 
-                var tb = new TextBox { Left=200, Top=top, Width=fw, Height=fh, BorderStyle=BorderStyle.FixedSingle, BackColor=Theme.BgSurface2, ForeColor=Theme.TextPrimary, Font=Theme.FontBody, Parent=card };
-                Theme.MakeRounded(tb, 6);
-                return tb;
-            }
+            int y=28, lw=140, fw=340, lh=28, fh=32;
+            Label L(string text, int top) => new Label { Text=text, Left=32, Top=top, Width=lw, Height=lh, Font=Theme.FontBold, ForeColor=Theme.TextSecondary, TextAlign=ContentAlignment.MiddleLeft, Parent=card };
+            TextBox TB(int top) => new TextBox { Left=32+lw+8, Top=top, Width=fw, Height=fh, BorderStyle=BorderStyle.FixedSingle, BackColor=Theme.BgSurface2, ForeColor=Theme.TextPrimary, Font=Theme.FontBody, Parent=card };
 
             L("Feka No", y); _addFekaNo = TB(y); y += 44;
 
             L("Category *", y);
-            _addCat = new ComboBox { Left=200, Top=y, Width=fw, DropDownStyle=ComboBoxStyle.DropDownList, Font=Theme.FontBody, BackColor=Theme.BgSurface2, ForeColor=Theme.TextPrimary, FlatStyle=FlatStyle.Flat, Parent=card };
-            Theme.MakeRounded(_addCat, 6);
+            _addCat = new ComboBox { Left=32+lw+8, Top=y, Width=fw-90, DropDownStyle=ComboBoxStyle.DropDownList, Font=Theme.FontBody, BackColor=Theme.BgSurface2, ForeColor=Theme.TextPrimary, FlatStyle=FlatStyle.Flat, Parent=card };
             foreach (var c in ComponentRepository.AllCategories.OrderBy(x => x)) _addCat.Items.Add(c);
             _addCat.SelectedIndexChanged += (s, e) => RebuildExtraFields();
+
+            var btnNewCat = new ModernButton { Text = "+ New Cat", Style = ModernButton.BtnStyle.Secondary, Width = 82, Height = fh, Left = 32+lw+8+(fw-90)+8, Top = y, Parent = card };
+            btnNewCat.Click += (s, e) => ShowNewCategoryDialog();
+            y += 44;
+
+            L("Global Fields", y);
+            var btnNewField = new ModernButton { Text = "+ New Field", Style = ModernButton.BtnStyle.Secondary, Width = 110, Height = fh, Left = 32+lw+8, Top = y, Parent = card };
+            btnNewField.Click += (s, e) => { ShowNewGlobalFieldDialog(); RebuildGlobalFields(); };
             y += 44;
 
             L("Description *", y); _addDesc = TB(y); y += 44;
             L("Part Number *", y); _addPart = TB(y); y += 44;
 
             L("Manufacturer", y);
-            _addMfr = new ComboBox { Left=200, Top=y, Width=fw, DropDownStyle=ComboBoxStyle.DropDown, Font=Theme.FontBody, BackColor=Theme.BgSurface2, ForeColor=Theme.TextPrimary, FlatStyle=FlatStyle.Flat, Parent=card, AutoCompleteMode=AutoCompleteMode.SuggestAppend, AutoCompleteSource=AutoCompleteSource.ListItems };
-            Theme.MakeRounded(_addMfr, 6);
+            _addMfr = new ComboBox { Left=32+lw+8, Top=y, Width=fw, DropDownStyle=ComboBoxStyle.DropDown, Font=Theme.FontBody, BackColor=Theme.BgSurface2, ForeColor=Theme.TextPrimary, FlatStyle=FlatStyle.Flat, Parent=card, AutoCompleteMode=AutoCompleteMode.SuggestAppend, AutoCompleteSource=AutoCompleteSource.ListItems };
             foreach (var m in ComponentRepository.AllManufacturers) _addMfr.Items.Add(m);
             y += 44;
 
             L("Footprint", y);
-            _addFoot = new ComboBox { Left=200, Top=y, Width=fw, DropDownStyle=ComboBoxStyle.DropDownList, Font=Theme.FontBody, BackColor=Theme.BgSurface2, ForeColor=Theme.TextPrimary, FlatStyle=FlatStyle.Flat, Parent=card };
-            Theme.MakeRounded(_addFoot, 6);
+            _addFoot = new ComboBox { Left=32+lw+8, Top=y, Width=fw, DropDownStyle=ComboBoxStyle.DropDownList, Font=Theme.FontBody, BackColor=Theme.BgSurface2, ForeColor=Theme.TextPrimary, FlatStyle=FlatStyle.Flat, Parent=card };
             foreach (var f in ComponentRepository.AllFootprints) _addFoot.Items.Add(f);
             y += 44;
 
             L("Library Ref", y);
-            _addLibRef = new ComboBox { Left=200, Top=y, Width=fw, DropDownStyle=ComboBoxStyle.DropDownList, Font=Theme.FontBody, BackColor=Theme.BgSurface2, ForeColor=Theme.TextPrimary, FlatStyle=FlatStyle.Flat, Parent=card };
-            Theme.MakeRounded(_addLibRef, 6);
+            _addLibRef = new ComboBox { Left=32+lw+8, Top=y, Width=fw, DropDownStyle=ComboBoxStyle.DropDownList, Font=Theme.FontBody, BackColor=Theme.BgSurface2, ForeColor=Theme.TextPrimary, FlatStyle=FlatStyle.Flat, Parent=card };
             foreach (var l in ComponentRepository.AllLibraryRefs) _addLibRef.Items.Add(l);
             y += 44;
 
             L("Footprint Ref", y); _addFootRef = TB(y); y += 44;
 
             L("Rating", y);
-            _addRating = new ComboBox { Left=200, Top=y, Width=fw, DropDownStyle=ComboBoxStyle.DropDownList, Font=Theme.FontBody, BackColor=Theme.BgSurface2, ForeColor=Theme.TextPrimary, FlatStyle=FlatStyle.Flat, Parent=card };
-            Theme.MakeRounded(_addRating, 6);
+            _addRating = new ComboBox { Left=32+lw+8, Top=y, Width=120, DropDownStyle=ComboBoxStyle.DropDownList, Font=Theme.FontBody, BackColor=Theme.BgSurface2, ForeColor=Theme.TextPrimary, FlatStyle=FlatStyle.Flat, Parent=card };
             _addRating.Items.AddRange(new object[]{"STD","AECQ"});
             _addRating.SelectedIndex = 0;
             y += 44;
 
             L("Process", y);
-            _addProcess = new ComboBox { Left=200, Top=y, Width=fw, DropDownStyle=ComboBoxStyle.DropDownList, Font=Theme.FontBody, BackColor=Theme.BgSurface2, ForeColor=Theme.TextPrimary, FlatStyle=FlatStyle.Flat, Parent=card };
-            Theme.MakeRounded(_addProcess, 6);
+            _addProcess = new ComboBox { Left=32+lw+8, Top=y, Width=120, DropDownStyle=ComboBoxStyle.DropDownList, Font=Theme.FontBody, BackColor=Theme.BgSurface2, ForeColor=Theme.TextPrimary, FlatStyle=FlatStyle.Flat, Parent=card };
             _addProcess.Items.AddRange(new object[]{"SMD","THT"});
             _addProcess.SelectedIndex = 0;
             y += 44;
@@ -1580,20 +1295,25 @@ private void Grid_CellEndEdit(object? sender, DataGridViewCellEventArgs e)
             int extraTop = y;
             _extraPanel = new Panel { Left=0, Top=extraTop, Width=card.Width, Height=0, BackColor=Color.Transparent, Parent=card };
 
-            var sep      = new Panel { Left=40, Width=640, Height=1, BackColor=Theme.Border, Parent=card };
-            var btnAdd   = new ModernButton { Text="Add Component", Style=ModernButton.BtnStyle.Success, Width=160, Height=36, Left=40, CustomBgColor=Theme.BgSurface, Parent=card };
-            var btnReset = new ModernButton { Text="Reset", Style=ModernButton.BtnStyle.Secondary, Width=90, Height=36, Left=210, CustomBgColor=Theme.BgSurface, Parent=card };
+            _globalPanel = new Panel { Left=0, Top=extraTop, Width=card.Width, Height=0, BackColor=Color.Transparent, Parent=card };
+
+            var sep      = new Panel { Left=32, Width=560, Height=1, BackColor=Theme.Border, Parent=card };
+            var btnAdd   = new ModernButton { Text="Add Component", Style=ModernButton.BtnStyle.Success, Width=160, Height=36, Left=32, Parent=card };
+            var btnReset = new ModernButton { Text="Reset", Style=ModernButton.BtnStyle.Secondary, Width=90, Height=36, Left=200, Parent=card };
 
             void Reposition()
             {
-                int baseY = extraTop + _extraPanel.Height + 12;
+                _globalPanel.Top = extraTop + _extraPanel.Height;
+                int baseY = extraTop + _extraPanel.Height + _globalPanel.Height + 12;
                 sep.Top = baseY; btnAdd.Top = baseY+12; btnReset.Top = baseY+12;
-                card.Height = baseY+70; _extraPanel.Width = card.Width;
+                card.Height = baseY+70; _extraPanel.Width = card.Width; _globalPanel.Width = card.Width;
             }
+            _reposition = Reposition;
 
-            _addCat.SelectedIndexChanged += (s, e) => { RebuildExtraFields(); Reposition(); };
+            _addCat.SelectedIndexChanged += (s, e) => { RebuildExtraFields(); RebuildGlobalFields(); Reposition(); };
             btnAdd.Click   += BtnAddComponent_Click;
             btnReset.Click += (s, e) => ClearAddForm();
+            RebuildGlobalFields();
             Reposition();
         }
 
@@ -1624,10 +1344,10 @@ private void Grid_CellEndEdit(object? sender, DataGridViewCellEventArgs e)
             var cat = _addCat.SelectedItem.ToString()!;
             if (!ComponentRepository.CategoryFields.TryGetValue(cat, out var fields) || fields.Count == 0) { _extraPanel.Height = 0; return; }
 
-            int y=4; const int lw=150,fw=480,fh=32,rowH=44,lx=40,fx=200;
+            int y=4; const int lw=140,fw=340,fh=32,rowH=44,lx=32,fx=32+lw+8;
             new Label { Text="▸  Category Parameters", Font=new Font("Segoe UI",8.5f,FontStyle.Bold), ForeColor=Theme.Accent, Left=lx, Top=y, Width=300, Height=24, BackColor=Color.Transparent, Parent=_extraPanel };
             y += 28;
-            new Panel { Left=lx, Top=y, Width=640, Height=1, BackColor=Theme.AccentLight, Parent=_extraPanel };
+            new Panel { Left=lx, Top=y, Width=fw+lw+8, Height=1, BackColor=Theme.AccentLight, Parent=_extraPanel };
             y += 8;
 
             foreach (var (key, label) in fields)
@@ -1642,19 +1362,18 @@ private void Grid_CellEndEdit(object? sender, DataGridViewCellEventArgs e)
                 if (hasOptions)
                 {
                     var cb = new ComboBox { Left=fx, Top=y, Width=fw, Height=fh, DropDownStyle=ComboBoxStyle.DropDownList, Font=Theme.FontBody, BackColor=Theme.BgSurface2, ForeColor=Theme.TextPrimary, FlatStyle=FlatStyle.Flat, Parent=_extraPanel };
-                    Theme.MakeRounded(cb, 6);
                     foreach (var o in opts!) cb.Items.Add(o);
                     _extraBoxes.Add((key, cb));
                 }
                 else
                 {
                     var tb = new TextBox { Left=fx, Top=y, Width=fw, Height=fh, BorderStyle=BorderStyle.FixedSingle, BackColor=Theme.BgSurface2, ForeColor=Theme.TextPrimary, Font=Theme.FontBody, Parent=_extraPanel };
-                    Theme.MakeRounded(tb, 6);
                     _extraBoxes.Add((key, tb));
                 }
                 y += rowH;
             }
             _extraPanel.Height = y+4;
+            _reposition();
         }
 
         private void BtnAddComponent_Click(object? sender, EventArgs e)
@@ -1676,6 +1395,15 @@ private void Grid_CellEndEdit(object? sender, DataGridViewCellEventArgs e)
                 string val = ctrl switch { ComboBox cb=>cb.Text.Trim(), TextBox tb=>tb.Text.Trim(), _=>"" };
                 if (!string.IsNullOrWhiteSpace(val)) comp.ExtraFields[key] = val;
             }
+            foreach (var (key, ctrl) in _globalBoxes)
+            {
+                string val = ctrl switch { ComboBox cb=>cb.Text.Trim(), TextBox tb=>tb.Text.Trim(), _=>"" };
+                if (!string.IsNullOrWhiteSpace(val))
+                {
+                    comp.ExtraFields[key] = val;
+                    ComponentRepository.RecordGlobalFieldValue(key, val);
+                }
+            }
             ComponentRepository.Add(comp);
             RefreshApprovalBadge();
             MessageBox.Show($"Component '{comp.Description}' added successfully!", "Added", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -1691,6 +1419,120 @@ private void Grid_CellEndEdit(object? sender, DataGridViewCellEventArgs e)
             if (_addLibRef.Items.Count > 0) _addLibRef.SelectedIndex = -1;
             _addRating.SelectedIndex = _addProcess.SelectedIndex = 0;
             _extraPanel.Controls.Clear(); _extraBoxes.Clear(); _extraPanel.Height = 0;
+            RebuildGlobalFields();
+        }
+
+        private void RebuildGlobalFields()
+        {
+            _globalPanel.Controls.Clear();
+            _globalBoxes.Clear();
+
+            var fields = ComponentRepository.GlobalFields;
+            if (fields.Count == 0) { _globalPanel.Height = 0; return; }
+
+            const int lw=140, fw=340, fh=32, rowH=44, lx=32, fx=32+lw+8;
+            int y = 4;
+
+            new Label
+            {
+                Text = "▸  Global Parameters",
+                Font = new Font("Segoe UI", 8.5f, FontStyle.Bold),
+                ForeColor = Color.FromArgb(99, 102, 241),
+                Left = lx, Top = y, Width = 300, Height = 24,
+                BackColor = Color.Transparent, Parent = _globalPanel
+            };
+            y += 28;
+            new Panel { Left=lx, Top=y, Width=fw+lw+8, Height=1, BackColor=Color.FromArgb(99,102,241), Parent=_globalPanel };
+            y += 8;
+
+            foreach (var field in fields)
+            {
+                new Label
+                {
+                    Text = field.Label, Left=lx, Top=y+2, Width=lw, Height=fh,
+                    Font=Theme.FontBold, ForeColor=Theme.TextSecondary,
+                    TextAlign=ContentAlignment.MiddleLeft,
+                    BackColor=Color.Transparent, Parent=_globalPanel
+                };
+
+                var values = ComponentRepository.GlobalFieldValues.TryGetValue(field.Key, out var v) ? v : new();
+
+                if (field.Type == "combo")
+                {
+                    var cb = new ComboBox
+                    {
+                        Left=fx, Top=y, Width=fw, Height=fh,
+                        DropDownStyle=ComboBoxStyle.DropDown,
+                        Font=Theme.FontBody, BackColor=Theme.BgSurface2,
+                        ForeColor=Theme.TextPrimary, FlatStyle=FlatStyle.Flat,
+                        AutoCompleteMode=AutoCompleteMode.SuggestAppend,
+                        AutoCompleteSource=AutoCompleteSource.ListItems,
+                        Parent=_globalPanel
+                    };
+                    foreach (var val in values) cb.Items.Add(val);
+                    _globalBoxes.Add((field.Key, cb));
+                }
+                else
+                {
+                    var tb = new TextBox
+                    {
+                        Left=fx, Top=y, Width=fw, Height=fh,
+                        BorderStyle=BorderStyle.FixedSingle,
+                        BackColor=Theme.BgSurface2, ForeColor=Theme.TextPrimary,
+                        Font=Theme.FontBody, Parent=_globalPanel
+                    };
+                    // Autocomplete from remembered values
+                    if (values.Count > 0)
+                    {
+                        tb.AutoCompleteMode = AutoCompleteMode.SuggestAppend;
+                        tb.AutoCompleteSource = AutoCompleteSource.CustomSource;
+                        var src = new AutoCompleteStringCollection();
+                        src.AddRange(values.ToArray());
+                        tb.AutoCompleteCustomSource = src;
+                    }
+                    _globalBoxes.Add((field.Key, tb));
+                }
+                y += rowH;
+            }
+
+            _globalPanel.Height = y + 4;
+            _reposition();
+        }
+
+        private void ShowNewGlobalFieldDialog()
+        {
+            var dlg = new Form
+            {
+                Text = "New Global Field", Width = 360, Height = 200,
+                StartPosition = FormStartPosition.CenterParent,
+                FormBorderStyle = FormBorderStyle.FixedDialog,
+                MaximizeBox = false, MinimizeBox = false,
+                BackColor = Theme.BgSurface
+            };
+
+            new Label { Text="Field Name:", Left=20, Top=20, Width=100, Height=24, ForeColor=Theme.TextPrimary, Font=Theme.FontBold, Parent=dlg };
+            var tbLabel = new TextBox { Left=130, Top=18, Width=180, BackColor=Theme.BgSurface2, ForeColor=Theme.TextPrimary, BorderStyle=BorderStyle.FixedSingle, Font=Theme.FontBody, Parent=dlg };
+
+            new Label { Text="Input Type:", Left=20, Top=58, Width=100, Height=24, ForeColor=Theme.TextPrimary, Font=Theme.FontBold, Parent=dlg };
+            var cbType = new ComboBox { Left=130, Top=56, Width=180, DropDownStyle=ComboBoxStyle.DropDownList, Font=Theme.FontBody, BackColor=Theme.BgSurface2, ForeColor=Theme.TextPrimary, FlatStyle=FlatStyle.Flat, Parent=dlg };
+            cbType.Items.AddRange(new object[]{ "Text (free input)", "Dropdown (remembered values)" });
+            cbType.SelectedIndex = 0;
+
+            var btnOk = new ModernButton { Text="Add", Style=ModernButton.BtnStyle.Success, Width=80, Height=32, Left=130, Top=100, Parent=dlg };
+            var btnCancel = new ModernButton { Text="Cancel", Style=ModernButton.BtnStyle.Secondary, Width=80, Height=32, Left=220, Top=100, Parent=dlg };
+
+            btnCancel.Click += (s, e) => dlg.DialogResult = DialogResult.Cancel;
+            btnOk.Click += (s, e) =>
+            {
+                if (string.IsNullOrWhiteSpace(tbLabel.Text)) return;
+                string label = tbLabel.Text.Trim();
+                string key   = label.Replace(" ", "_").ToLower();
+                string type  = cbType.SelectedIndex == 1 ? "combo" : "text";
+                ComponentRepository.AddGlobalField(key, label, type);
+                dlg.DialogResult = DialogResult.OK;
+            };
+
+            dlg.ShowDialog(this);
         }
 
         // ══════════════════════════════════════════════════════════════════
@@ -1768,7 +1610,7 @@ private void Grid_CellEndEdit(object? sender, DataGridViewCellEventArgs e)
                     if (MessageBox.Show($"Approve '{desc}'?", "Approve", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
                     { 
                         ComponentRepository.Approve(id); 
-                        RefreshApproval();
+                        RefreshApproval(); // Burada liste yenilenince onaylanan kaybolacak
                         RefreshApprovalBadge(); 
                     }
                 }
@@ -1801,9 +1643,20 @@ private void Grid_CellEndEdit(object? sender, DataGridViewCellEventArgs e)
             var table = new System.Data.DataTable();
             foreach (var col in new[] { "FekaNo", "ID", "Category", "Description", "PartNumber", "Manufacturer", "Footprint", "Rating", "Process", "Status" })
                 table.Columns.Add(col);
+            foreach (var gf in ComponentRepository.GlobalFields)
+                if (!table.Columns.Contains(gf.Key)) table.Columns.Add(gf.Key);
 
             foreach (var c in pendingOnly)
-                table.Rows.Add(c.FekaNo, c.Id, c.Category, c.Description, c.PartNumber, c.Manufacturer, c.Footprint, c.Rating, c.Process, c.Status);
+            {
+                var row = table.NewRow();
+                row["FekaNo"] = c.FekaNo; row["ID"] = c.Id; row["Category"] = c.Category;
+                row["Description"] = c.Description; row["PartNumber"] = c.PartNumber;
+                row["Manufacturer"] = c.Manufacturer; row["Footprint"] = c.Footprint;
+                row["Rating"] = c.Rating; row["Process"] = c.Process; row["Status"] = c.Status;
+                foreach (var gf in ComponentRepository.GlobalFields)
+                    if (c.ExtraFields.TryGetValue(gf.Key, out var val)) row[gf.Key] = val;
+                table.Rows.Add(row);
+            }
 
             _approvalGrid.DataSource = table;
         }
@@ -1825,26 +1678,27 @@ private void Grid_CellEndEdit(object? sender, DataGridViewCellEventArgs e)
             _pageExport = new Panel { Dock = DockStyle.Fill, BackColor = Theme.BgMain, Visible = false };
             _content.Controls.Add(_pageExport);
 
-            var card = new CardPanel { Radius = 12, Left=0, Top=0, Width=620, Height=400, BackColor=Theme.BgSurface, Anchor=AnchorStyles.Top|AnchorStyles.Left };
+            var card = new Panel { Left=0, Top=0, Width=620, Height=400, BackColor=Theme.BgSurface, Anchor=AnchorStyles.Top|AnchorStyles.Left };
+            card.Paint += (s, e) => { using var pen=new Pen(Theme.Border,1); e.Graphics.DrawRectangle(pen,0,0,card.Width-1,card.Height-1); };
             _pageExport.Controls.Add(card);
 
             new Label { Text="Export Options", Font=Theme.FontH2, ForeColor=Theme.TextPrimary, Left=24, Top=20, AutoSize=true, Parent=card };
             new Label { Text="Category filter (optional):", Font=Theme.FontBold, ForeColor=Theme.TextSecondary, Left=24, Top=68, AutoSize=true, Parent=card };
 
             _exportCat = new ComboBox { Left=24, Top=92, Width=200, DropDownStyle=ComboBoxStyle.DropDownList, Font=Theme.FontBody, BackColor=Theme.BgSurface2, ForeColor=Theme.TextPrimary, FlatStyle=FlatStyle.Flat, Parent=card };
-            Theme.MakeRounded(_exportCat, 6);
             _exportCat.Items.Add("All Categories");
             foreach (var cat in ComponentRepository.AllCategories.OrderBy(c => c)) _exportCat.Items.Add(cat);
             _exportCat.SelectedIndex = 0;
 
             new Label { Text="Excel / Spreadsheet:", Font=Theme.FontBold, ForeColor=Theme.TextSecondary, Left=24, Top=136, AutoSize=true, Parent=card };
 
-            var btnExportEBom = new ModernButton { Text="Export E-BOM (xlsx,xls,ods,csv,tsv,json)", Style=ModernButton.BtnStyle.Primary, Width=200, Height=70, Left=24,  Top=180, CustomBgColor=Theme.BgSurface, Parent=card };
+            // ── E-BOM butonu artık unified dialog açıyor ──────────────────
+            var btnExportEBom = new ModernButton { Text="Export E-BOM (xlsx,xls,ods,csv,tsv,json)", Style=ModernButton.BtnStyle.Primary, Width=200, Height=70, Left=24,  Top=180, Parent=card };
 
             btnExportEBom.Click += BtnExportEBom_Click;
             new Panel { Left=24, Top=292, Width=572, Height=1, BackColor=Theme.Border, Parent=card };
             new Label { Text="Import CSV", Font=Theme.FontH2, ForeColor=Theme.TextPrimary, Left=24, Top=306, AutoSize=true, Parent=card };
-            var btnImportCsv = new ModernButton { Text="Import CSV File…", Style=ModernButton.BtnStyle.Secondary, Width=160, Height=34, Left=24, Top=338, CustomBgColor=Theme.BgSurface, Parent=card };
+            var btnImportCsv = new ModernButton { Text="Import CSV File…", Style=ModernButton.BtnStyle.Secondary, Width=160, Height=34, Left=24, Top=338, Parent=card };
             btnImportCsv.Click += BtnImportCsv_Click;
         }
 
@@ -1875,22 +1729,22 @@ private void Grid_CellEndEdit(object? sender, DataGridViewCellEventArgs e)
             {
                 switch (dlg.FilterIndex)
                 {
-                    case 1:
+                    case 1: // xlsx – şablonlu E-BOM
                         ExportToEBomExcel(dlg.FileName, components);
                         break;
-                    case 2:
+                    case 2: // xls – CSV içeriği .xls uzantısıyla
                         ExportDelimitedToPath(ExportFormat.Xls, dlg.FileName, components);
                         break;
-                    case 3:
+                    case 3: // csv
                         ExportDelimitedToPath(ExportFormat.Csv, dlg.FileName, components);
                         break;
-                    case 4:
+                    case 4: // tsv
                         ExportDelimitedToPath(ExportFormat.Tsv, dlg.FileName, components);
                         break;
-                    case 5:
+                    case 5: // json
                         ExportDelimitedToPath(ExportFormat.Json, dlg.FileName, components);
                         break;
-                    case 6:
+                    case 6: // xml
                         ExportDelimitedToPath(ExportFormat.Xml, dlg.FileName, components);
                         break;
                 }
@@ -2116,7 +1970,7 @@ private void Grid_CellEndEdit(object? sender, DataGridViewCellEventArgs e)
                     workbook.SaveAs(path);
                 }
             }
-            catch (Exception ex) { MessageBox.Show("Error: " + ex.Message, "System Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+            catch (Exception ex) { MessageBox.Show("Hata: " + ex.Message, "Sistem Hatası", MessageBoxButtons.OK, MessageBoxIcon.Error); }
         }
 
         private static void CopyRowFormat(IXLWorksheet ws, int srcRow, int dstRow, int c1, int c2)
@@ -2143,369 +1997,457 @@ private void Grid_CellEndEdit(object? sender, DataGridViewCellEventArgs e)
         }
 
         // ══════════════════════════════════════════════════════════════════
-        //  USER MANAGER PAGE (gömülü panel - admin only)
-        // ══════════════════════════════════════════════════════════════════
-        private DataGridView _userGrid = null!;
-
-        private void BuildUserManagerPage()
-        {
-            _pageUserManager = new Panel { Dock = DockStyle.Fill, BackColor = Theme.BgMain, Visible = false };
-            _content.Controls.Add(_pageUserManager);
-
-            // Üst bilgi şeridi
-            var infoBar = new Panel { Left = 0, Top = 0, Height = 40, BackColor = Color.FromArgb(219, 234, 254), Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
-            new Label { Text = "Only admins can see this page. You can use right-click or the buttons to perform actions.", ForeColor = Color.FromArgb(30, 64, 175), Font = Theme.FontBody, AutoSize = true, Left = 12, Top = 10, Parent = infoBar };
-            _pageUserManager.Controls.Add(infoBar);
-            _pageUserManager.Resize += (s, e) => infoBar.Width = _pageUserManager.ClientSize.Width;
-
-            // Araç çubuğu
-            var toolRow = new Panel { Left = 0, Top = 48, Height = 40, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right, BackColor = Theme.BgSurface };
-            toolRow.Paint += (s, e) => e.Graphics.DrawLine(new Pen(Theme.Border, 1), 0, 39, toolRow.Width, 39);
-            _pageUserManager.Controls.Add(toolRow);
-            _pageUserManager.Resize += (s, e) => toolRow.Width = _pageUserManager.ClientSize.Width;
-
-            var btnOpenFull = new ModernButton { Text = "Open Full Screen", Style = ModernButton.BtnStyle.Primary, Width = 150, Height = 32, Left = 12, Top = 4, Parent = toolRow };
-            btnOpenFull.Click += (s, e) =>
-            {
-                var dlg = new UserManagerForm();
-                dlg.ShowDialog(this);
-                RefreshUserManagerPage();
-            };
-
-            var btnAddQuick = new ModernButton { Text = "New User", Style = ModernButton.BtnStyle.Success, Width = 120, Height = 32, Left = 174, Top = 4, Parent = toolRow };
-            btnAddQuick.Click += (s, e) =>
-            {
-                var dlg = new UserManagerForm();
-                dlg.ShowDialog(this);
-                RefreshUserManagerPage();
-            };
-
-            // Grid
-            _userGrid = new DataGridView
-            {
-                Left = 0, Top = 96,
-                ReadOnly = true, AllowUserToAddRows = false, AllowUserToDeleteRows = false,
-                RowHeadersVisible = false, MultiSelect = false,
-                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
-                BackgroundColor = Theme.BgSurface, BorderStyle = BorderStyle.None,
-                GridColor = Theme.Border, Font = Theme.FontBody,
-                ColumnHeadersHeight = 32,
-                ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing,
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom,
-                Parent = _pageUserManager,
-            };
-            _userGrid.CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal;
-            typeof(DataGridView).InvokeMember("DoubleBuffered", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.SetProperty, null, _userGrid, new object[] { true });
-            _userGrid.ColumnHeadersBorderStyle = DataGridViewHeaderBorderStyle.None;
-            _userGrid.EnableHeadersVisualStyles = false;
-            _userGrid.AutoGenerateColumns = false;
-            _userGrid.DefaultCellStyle              = new DataGridViewCellStyle { BackColor = Theme.BgSurface, ForeColor = Theme.TextPrimary, SelectionBackColor = Theme.AccentLight, SelectionForeColor = Theme.Accent, Padding = new Padding(16, 0, 16, 0) };
-            _userGrid.AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle { BackColor = Theme.BgSurface2, ForeColor = Theme.TextPrimary, SelectionBackColor = Theme.AccentLight, SelectionForeColor = Theme.Accent, Padding = new Padding(16, 0, 16, 0) };
-            _userGrid.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle { BackColor = Theme.BgSurface, ForeColor = Theme.TextSecondary, Font = new Font("Segoe UI", 8.5f, FontStyle.Bold), Padding = new Padding(16, 0, 16, 0) };
-            _userGrid.RowTemplate.Height = 48;
-            _userGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Id",        HeaderText = "ID",          Width = 80,  DataPropertyName = "Id",       SortMode = DataGridViewColumnSortMode.NotSortable });
-            _userGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "Username",  HeaderText = "Username",    Width = 200, DataPropertyName = "Username", SortMode = DataGridViewColumnSortMode.NotSortable, AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill });
-            _userGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "IsAdmin",   HeaderText = "Role",        Width = 110, DataPropertyName = "IsAdmin",  SortMode = DataGridViewColumnSortMode.NotSortable });
-            _userGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "IsActive",  HeaderText = "Status",      Width = 100,  DataPropertyName = "IsActive", SortMode = DataGridViewColumnSortMode.NotSortable });
-            _userGrid.Columns.Add(new DataGridViewTextBoxColumn { Name = "CreatedAt", HeaderText = "Created At",  Width = 150, DataPropertyName = "CreatedAt",SortMode = DataGridViewColumnSortMode.NotSortable });
-
-            _userGrid.CellFormatting += (s, e) =>
-            {
-                if (e.RowIndex < 0) return;
-                if (_userGrid.Columns[e.ColumnIndex].Name == "IsAdmin")
-                { bool a = e.Value is true; e.Value = a ? "Admin" : "User"; e.CellStyle.ForeColor = a ? Theme.Accent : Theme.TextSecondary; e.CellStyle.Font = new Font("Segoe UI", 8.5f, a ? FontStyle.Bold : FontStyle.Regular); }
-                if (_userGrid.Columns[e.ColumnIndex].Name == "IsActive")
-                { bool a = e.Value is true; e.Value = a ? "Active" : "Inactive"; e.CellStyle.ForeColor = a ? Theme.AccentGreen : Theme.Danger; e.CellStyle.Font = new Font("Segoe UI", 8.5f, FontStyle.Bold); }
-                if (_userGrid.Columns[e.ColumnIndex].Name == "CreatedAt" && e.Value is DateTime dt)
-                    e.Value = dt.ToString("dd.MM.yyyy HH:mm");
-            };
-
-            // Sağ tık menüsü
-            var ctx = new ContextMenuStrip();
-            ctx.Items.Add("Toggle Admin Privileges", null, (s, e) => UserGridToggleAdmin());
-            ctx.Items.Add("Toggle Active/Inactive",  null, (s, e) => UserGridToggleActive());
-            ctx.Items.Add("Reset Password",          null, (s, e) => UserGridResetPassword());
-            ctx.Items.Add("-");
-            ctx.Items.Add("Delete User",             null, (s, e) => UserGridDelete());
-            _userGrid.ContextMenuStrip = ctx;
-
-            _pageUserManager.Resize += (s, e) =>
-            {
-                _userGrid.Width  = _pageUserManager.ClientSize.Width;
-                _userGrid.Height = _pageUserManager.ClientSize.Height - 96;
-            };
-        }
-
-        private void RefreshUserManagerPage()
-        {
-            if (_userGrid == null) return;
-            var table = new System.Data.DataTable();
-            table.Columns.Add("Id",        typeof(int));
-            table.Columns.Add("Username",  typeof(string));
-            table.Columns.Add("IsAdmin",   typeof(bool));
-            table.Columns.Add("IsActive",  typeof(bool));
-            table.Columns.Add("CreatedAt", typeof(DateTime));
-            foreach (var u in CMS.Data.UserRepository.GetAll().OrderBy(x => x.Id))
-                table.Rows.Add(u.Id, u.Username, u.IsAdmin, u.IsActive, u.CreatedAt);
-            _userGrid.DataSource = table;
-        }
-
-        private CMS.Data.AppUser? GetSelectedUserFromGrid()
-        {
-            if (_userGrid.SelectedRows.Count == 0) { MessageBox.Show("Please select a user.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information); return null; }
-            int id = (int)_userGrid.SelectedRows[0].Cells["Id"].Value!;
-            return CMS.Data.UserRepository.GetAll().FirstOrDefault(u => u.Id == id);
-        }
-
-        private void UserGridToggleAdmin()
-        {
-            var u = GetSelectedUserFromGrid();
-            if (u == null) return;
-            if (u.Id == CMS.Data.UserRepository.CurrentUser?.Id) { MessageBox.Show("You cannot change your own admin privileges.", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
-            CMS.Data.UserRepository.SetAdmin(u.Id, !u.IsAdmin);
-            RefreshUserManagerPage();
-        }
-
-        private void UserGridToggleActive()
-        {
-            var u = GetSelectedUserFromGrid();
-            if (u == null) return;
-            if (u.Id == CMS.Data.UserRepository.CurrentUser?.Id) { MessageBox.Show("You cannot deactivate your own account.", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
-            CMS.Data.UserRepository.SetActive(u.Id, !u.IsActive);
-            RefreshUserManagerPage();
-        }
-
-        private void UserGridResetPassword()
-        {
-            var u = GetSelectedUserFromGrid();
-            if (u == null) return;
-            string newPw = Microsoft.VisualBasic.Interaction.InputBox($"New password for '{u.Username}':", "Reset Password", "");
-            if (string.IsNullOrWhiteSpace(newPw)) return;
-            CMS.Data.UserRepository.ChangePassword(u.Id, newPw);
-            MessageBox.Show("Password updated successfully.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
-        }
-
-        private void UserGridDelete()
-        {
-            var u = GetSelectedUserFromGrid();
-            if (u == null) return;
-            if (u.Id == CMS.Data.UserRepository.CurrentUser?.Id) { MessageBox.Show("You cannot delete your own account.", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
-            if (MessageBox.Show($"Are you sure you want to delete the user '{u.Username}'?", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
-            { CMS.Data.UserRepository.DeleteUser(u.Id); RefreshUserManagerPage(); }
-        }
-
-        // ══════════════════════════════════════════════════════════════════
         //  CATEGORY MANAGER
         // ══════════════════════════════════════════════════════════════════
         private void BuildCategoryManager()
-        {
-            _pageCatManager = new Panel { Dock = DockStyle.Fill, BackColor = Theme.BgMain, Visible = false };
-            _content.Controls.Add(_pageCatManager);
+{
+    _pageCatManager = new Panel { Dock = DockStyle.Fill, BackColor = Theme.BgMain, Visible = false };
+    _content.Controls.Add(_pageCatManager);
 
-            var table = new TableLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                ColumnCount = 3,
-                RowCount = 1,
-                BackColor = Color.Transparent
-            };
-            table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30f));
-            table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35f));
-            table.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 35f));
-            _pageCatManager.Controls.Add(table);
+    // --- LEFT CARD (Kategoriler) ---
+    var leftCard = new Panel
+    {
+        Left = 0, Top = 0, Width = 220,
+        Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Bottom,
+        BackColor = Theme.BgSurface,
+    };
+    leftCard.Paint += (s, e) => { using var pen = new Pen(Theme.Border, 1); e.Graphics.DrawRectangle(pen, 0, 0, leftCard.Width - 1, leftCard.Height - 1); };
+    _pageCatManager.Controls.Add(leftCard);
+    _pageCatManager.Resize += (s, e) => leftCard.Height = _pageCatManager.ClientSize.Height;
 
-            // --- LEFT CARD (Kategoriler) ---
-            var leftCard = new CardPanel
-            {
-                Dock = DockStyle.Fill,
-                Margin = new Padding(0, 0, 8, 0),
-                CardColor = Theme.BgSurface,
-                BorderColor = Theme.Border,
-                Radius = 16
-            };
-            table.Controls.Add(leftCard, 0, 0);
+    new Label { Text = "Categories", Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), ForeColor = Theme.TextSecondary, Left = 16, Top = 16, AutoSize = true, Parent = leftCard };
 
-            new Label { Text = "Categories", Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), ForeColor = Theme.TextSecondary, Left = 16, Top = 16, AutoSize = true, Parent = leftCard };
+    _catList = new ListBox
+    {
+        Left = 8, Top = 44, Width = 204,
+        Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Bottom,
+        BackColor = Theme.BgSurface2, ForeColor = Theme.TextPrimary,
+        BorderStyle = BorderStyle.None, Font = Theme.FontBody, Parent = leftCard,
+    };
+    // Düzeltme: Alt kısımdaki input alanlarına çarpmaması için yükseklik payı artırıldı
+    leftCard.Resize += (s, e) => _catList.Height = leftCard.Height - 100;
 
-            _catList = new ListBox
-            {
-                Left = 8, Top = 44, Width = 204,
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Bottom,
-                BackColor = Theme.BgSurface2, ForeColor = Theme.TextPrimary,
-                BorderStyle = BorderStyle.None, Font = Theme.FontBody, Parent = leftCard,
-            };
+    _catList.SelectedIndexChanged += (s, e) =>
+    {
+        CloseFieldDetail();
+        RefreshFieldList();
+    };
 
-            _catList.SelectedIndexChanged += (s, e) =>
-            {
-                CloseFieldDetail();
-                RefreshFieldList();
-            };
+    var txtNewCat = new TextBox { Left = 8, Width = 152, Height = 28, BorderStyle = BorderStyle.FixedSingle, BackColor = Theme.BgSurface2, ForeColor = Theme.TextPrimary, Font = Theme.FontBody, PlaceholderText="New category...", Anchor = AnchorStyles.Bottom | AnchorStyles.Left, Parent = leftCard };
+    var btnAddCat = new ModernButton { Text = "+", Style = ModernButton.BtnStyle.Primary, Width = 44, Height = 28, Left = 164, Anchor = AnchorStyles.Bottom | AnchorStyles.Left, Parent = leftCard };
+    
+    // Düzeltme: Dikey hizalama txtNewCat ile btnAddCat için eşitlendi
+    leftCard.Resize += (s, e) => { 
+        txtNewCat.Top = leftCard.Height - 40; 
+        btnAddCat.Top = leftCard.Height - 40; 
+    };
 
-            var txtNewCat = new TextBox { Left = 8, Width = 152, Height = 28, BorderStyle = BorderStyle.FixedSingle, BackColor = Theme.BgSurface2, ForeColor = Theme.TextPrimary, Font = Theme.FontBody, PlaceholderText="New category...", Anchor = AnchorStyles.Bottom | AnchorStyles.Left, Parent = leftCard };
-            Theme.MakeRounded(txtNewCat, 12);
-            var btnAddCat = new ModernButton { Text = "+", Style = ModernButton.BtnStyle.Primary, Width = 44, Height = 28, Left = 164, CustomBgColor = Theme.BgSurface, Anchor = AnchorStyles.Bottom | AnchorStyles.Left, Parent = leftCard };
-            
-            leftCard.Resize += (s, e) => { 
-                _catList.Height = leftCard.Height - 100;
-                _catList.Width = leftCard.Width - 16;
-                txtNewCat.Parent.Top = leftCard.Height - 40; 
-                btnAddCat.Top = leftCard.Height - 40; 
-                txtNewCat.Parent.Width = leftCard.Width - 68;
-                txtNewCat.Width = txtNewCat.Parent.Width - 16;
-                btnAddCat.Left = leftCard.Width - 52;
-            };
+    btnAddCat.Click += (s, e) =>
+    {
+        var name = txtNewCat.Text.Trim().ToUpper();
+        if (string.IsNullOrWhiteSpace(name)) return;
+        if (ComponentRepository.CategoryFields.ContainsKey(name))
+        { MessageBox.Show($"'{name}' already exists.", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+        ComponentRepository.AddCategory(name);
+        txtNewCat.Text = "";
+        RefreshCategoryManager();
+        var idx = _catList.Items.IndexOf(name);
+        if (idx >= 0) _catList.SelectedIndex = idx;
+    };
 
-            btnAddCat.Click += (s, e) =>
-            {
-                var name = txtNewCat.Text.Trim().ToUpper();
-                if (string.IsNullOrWhiteSpace(name)) return;
-                if (ComponentRepository.CategoryFields.ContainsKey(name))
-                { MessageBox.Show($"'{name}' already exists.", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
-                ComponentRepository.AddCategory(name);
-                txtNewCat.Text = "";
-                RefreshCategoryManager();
-                var idx = _catList.Items.IndexOf(name);
-                if (idx >= 0) _catList.SelectedIndex = idx;
-            };
+    // --- MIDDLE CARD (Alanlar) ---
+    const int MID_LEFT = 228;
+    const int MID_W = 280;
 
-            // --- MIDDLE CARD (Alanlar) ---
-            var midCard = new CardPanel
-            {
-                Dock = DockStyle.Fill,
-                Margin = new Padding(0, 0, 8, 0),
-                CardColor = Theme.BgSurface,
-                BorderColor = Theme.Border,
-                Radius = 16
-            };
-            table.Controls.Add(midCard, 1, 0);
+    var midCard = new Panel
+    {
+        Left = MID_LEFT, Top = 0, Width = MID_W,
+        Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Bottom,
+        BackColor = Theme.BgSurface,
+    };
+    midCard.Paint += (s, e) => { using var pen = new Pen(Theme.Border, 1); e.Graphics.DrawRectangle(pen, 0, 0, midCard.Width - 1, midCard.Height - 1); };
+    _pageCatManager.Controls.Add(midCard);
+    _pageCatManager.Resize += (s, e) => midCard.Height = _pageCatManager.ClientSize.Height;
 
-            _lblCatTitle = new Label { Text = "Select a category", Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), ForeColor = Theme.TextSecondary, Left = 16, Top = 16, Width = 155, AutoSize = false, Parent = midCard };
+    // Düzeltme: Başlık genişliği butonla çakışmaması için daraltıldı
+    _lblCatTitle = new Label { Text = "Select a category", Font = new Font("Segoe UI", 9.5f, FontStyle.Bold), ForeColor = Theme.TextSecondary, Left = 16, Top = 16, Width = MID_W - 125, AutoSize = false, Parent = midCard };
 
-            var btnDelCat = new ModernButton { Text = "Delete Category", Style = ModernButton.BtnStyle.Danger, Width = 140, Height = 32, Left = 130, Top = 10, CustomBgColor = Theme.BgSurface, Parent = midCard };
-            btnDelCat.Click += (s, e) =>
-            {
-                var sel = _catList.SelectedItem?.ToString();
-                if (sel == null) return;
-                if (MessageBox.Show($"Delete category '{sel}' and ALL its field definitions?\n(Components are NOT deleted)", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
-                { ComponentRepository.DeleteCategory(sel); RefreshCategoryManager(); }
-            };
+    // Düzeltme: "Delete Cat" butonu konumu başlığın üzerine binmeyecek şekilde sağa yaslandı
+    var btnDelCat = new ModernButton { Text = "Delete Cat", Style = ModernButton.BtnStyle.Danger, Width = 90, Height = 26, Left = MID_W - 100, Top = 14, Parent = midCard };
+    btnDelCat.Click += (s, e) =>
+    {
+        var sel = _catList.SelectedItem?.ToString();
+        if (sel == null) return;
+        if (MessageBox.Show($"Delete category '{sel}' and ALL its field definitions?\n(Components are NOT deleted)", "Confirm", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
+        { ComponentRepository.DeleteCategory(sel); RefreshCategoryManager(); }
+    };
 
-            new Label { Text = "Fields", Font = new Font("Segoe UI", 8.5f, FontStyle.Bold), ForeColor = Theme.TextMuted, Left = 16, Top = 50, AutoSize = true, Parent = midCard };
+    new Label { Text = "Fields", Font = new Font("Segoe UI", 8.5f, FontStyle.Bold), ForeColor = Theme.TextMuted, Left = 16, Top = 50, AutoSize = true, Parent = midCard };
 
-            _fieldList = new ListBox
-            {
-                Left = 8, Top = 72, Width = 264,
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Bottom,
-                BackColor = Theme.BgSurface2, ForeColor = Theme.TextPrimary,
-                BorderStyle = BorderStyle.None, Font = Theme.FontBody, Parent = midCard,
-            };
+    _fieldList = new ListBox
+    {
+        Left = 8, Top = 72, Width = MID_W - 16,
+        Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Bottom,
+        BackColor = Theme.BgSurface2, ForeColor = Theme.TextPrimary,
+        BorderStyle = BorderStyle.None, Font = Theme.FontBody, Parent = midCard,
+    };
+    // Düzeltme: Liste yüksekliği, alttaki "Remove Field" butonuyla çakışmayacak şekilde ayarlandı
+    midCard.Resize += (s, e) => _fieldList.Height = midCard.Height - 210;
 
-            _fieldList.SelectedIndexChanged += (s, e) =>
-            {
-                var catSel = _catList.SelectedItem?.ToString();
-                var fieldSel = _fieldList.SelectedItem?.ToString();
-                if (catSel == null || fieldSel == null) { CloseFieldDetail(); return; }
-            };
+    _fieldList.SelectedIndexChanged += (s, e) =>
+    {
+        var catSel = _catList.SelectedItem?.ToString();
+        var fieldSel = _fieldList.SelectedItem?.ToString();
+        if (catSel == null || fieldSel == null) { CloseFieldDetail(); return; }
+        // Detail panel disabled
+        // ShowFieldDetail(catSel, fieldSel);
+    };
 
-            var btnDelField = new ModernButton { Text = "Remove Field", Style = ModernButton.BtnStyle.Secondary, Width = 130, Height = 32, Left = 8, CustomBgColor = Theme.BgSurface, Anchor = AnchorStyles.Bottom | AnchorStyles.Left, Parent = midCard };
-            
-            btnDelField.Click += (s, e) =>
-            {
-                var catSel = _catList.SelectedItem?.ToString();
-                var fieldSel = _fieldList.SelectedItem?.ToString();
-                if (catSel == null || fieldSel == null) return;
-                ComponentRepository.RemoveFieldFromCategory(catSel, fieldSel.Trim());
-                CloseFieldDetail();
-                RefreshFieldList();
-            };
+    // Düzeltme: "Remove Field" butonu liste bittiğinde hemen altında düzgün duracak şekilde konumu güncellendi
+    var btnDelField = new ModernButton { Text = "Remove Field", Style = ModernButton.BtnStyle.Secondary, Width = 130, Height = 28, Left = 8, Anchor = AnchorStyles.Bottom | AnchorStyles.Left, Parent = midCard };
+    midCard.Resize += (s, e) => btnDelField.Top = midCard.Height - 135; 
+    
+    btnDelField.Click += (s, e) =>
+    {
+        var catSel = _catList.SelectedItem?.ToString();
+        var fieldSel = _fieldList.SelectedItem?.ToString();
+        if (catSel == null || fieldSel == null) return;
+        ComponentRepository.RemoveFieldFromCategory(catSel, fieldSel.Trim());
+        CloseFieldDetail();
+        RefreshFieldList();
+    };
 
-            var sepLine = new Panel { Left = 8, Height = 1, BackColor = Theme.Border, Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right, Parent = midCard };
-            
-            var lblAddField = new Label { Text = "Add Field:", Font = Theme.FontBold, ForeColor = Theme.TextSecondary, Left = 8, Width = 70, Height = 28, AutoSize = false, TextAlign = ContentAlignment.MiddleLeft, Anchor = AnchorStyles.Bottom | AnchorStyles.Left, Parent = midCard };
-            var txtFieldKey = new TextBox { Width = 190, Height = 28, BorderStyle = BorderStyle.FixedSingle, BackColor = Theme.BgSurface2, ForeColor = Theme.TextPrimary, Font = Theme.FontBody, PlaceholderText = "Field key (e.g. Voltage(V))", Left = 82, Anchor = AnchorStyles.Bottom | AnchorStyles.Left, Parent = midCard };
-            Theme.MakeRounded(txtFieldKey, 12);
-            var btnAddField = new ModernButton { Text = "Add", Style = ModernButton.BtnStyle.Success, Width = 264, Height = 32, Left = 8, CustomBgColor = Theme.BgSurface, Anchor = AnchorStyles.Bottom | AnchorStyles.Left, Parent = midCard };
+    var sepLine = new Panel { Left = 8, Height = 1, BackColor = Theme.Border, Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right, Parent = midCard };
+    
+    var lblAddField = new Label { Text = "Add Field:", Font = Theme.FontBold, ForeColor = Theme.TextSecondary, Left = 8, Width = 70, Height = 28, AutoSize = false, TextAlign = ContentAlignment.MiddleLeft, Anchor = AnchorStyles.Bottom | AnchorStyles.Left, Parent = midCard };
+    var txtFieldKey = new TextBox { Width = MID_W - 90, Height = 28, BorderStyle = BorderStyle.FixedSingle, BackColor = Theme.BgSurface2, ForeColor = Theme.TextPrimary, Font = Theme.FontBody, PlaceholderText = "Field key (e.g. Voltage(V))", Left = 82, Anchor = AnchorStyles.Bottom | AnchorStyles.Left, Parent = midCard };
+    var btnAddField = new ModernButton { Text = "Add", Style = ModernButton.BtnStyle.Success, Width = MID_W - 16, Height = 28, Left = 8, Anchor = AnchorStyles.Bottom | AnchorStyles.Left, Parent = midCard };
 
-            midCard.Resize += (s, e) =>
-            {
-                _lblCatTitle.Width = midCard.Width - 170;
-                btnDelCat.Left = midCard.Width - 148;
-                _fieldList.Height = midCard.Height - 210;
-                _fieldList.Width = midCard.Width - 16;
-                btnDelField.Top = midCard.Height - 135;
-                sepLine.Top = midCard.Height - 145;
-                sepLine.Width = midCard.Width - 16;
-                lblAddField.Top = midCard.Height - 100;
-                txtFieldKey.Parent.Top = midCard.Height - 100;
-                txtFieldKey.Parent.Width = midCard.Width - 90;
-                txtFieldKey.Width = txtFieldKey.Parent.Width - 16;
-                btnAddField.Top = midCard.Height - 60;
-                btnAddField.Width = midCard.Width - 16;
-            };
+    // Düzeltme: Alt panel elemanlarının birbirine girmemesi için Top değerleri netleştirildi
+    midCard.Resize += (s, e) =>
+    {
+        sepLine.Top = midCard.Height - 145;
+        sepLine.Width = midCard.Width - 16;
+        lblAddField.Top = midCard.Height - 100;
+        txtFieldKey.Top = midCard.Height - 100;
+        btnAddField.Top = midCard.Height - 60;
+    };
 
-            btnAddField.Click += (s, e) =>
-            {
-                var catSel = _catList.SelectedItem?.ToString();
-                if (catSel == null) { MessageBox.Show("Please select a category first.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
-                var key = txtFieldKey.Text.Trim();
-                if (string.IsNullOrWhiteSpace(key)) { MessageBox.Show("Field key is required.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
-                ComponentRepository.AddFieldToCategory(catSel, key, key);
-                txtFieldKey.Text = "";
-                RefreshFieldList();
-            };
+    btnAddField.Click += (s, e) =>
+    {
+        var catSel = _catList.SelectedItem?.ToString();
+        if (catSel == null) { MessageBox.Show("Please select a category first.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+        var key = txtFieldKey.Text.Trim();
+        if (string.IsNullOrWhiteSpace(key)) { MessageBox.Show("Field key is required.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+        ComponentRepository.AddFieldToCategory(catSel, key, key);
+        txtFieldKey.Text = "";
+        RefreshFieldList();
+    };
 
-            // --- RIGHT CARD (Detaylar) ---
-            _fieldDetailPanel = new CardPanel
-            {
-                Dock = DockStyle.Fill,
-                Margin = new Padding(0),
-                CardColor = Theme.BgSurface,
-                BorderColor = Theme.Border,
-                Radius = 16,
-                Visible = false,
-            };
-            table.Controls.Add(_fieldDetailPanel, 2, 0);
+    // --- RIGHT CARD (Detaylar) ---
+    const int RIGHT_LEFT = MID_LEFT + MID_W + 8;
 
-            var btnCloseDetail = new Label
-            {
-                Text = "✕", ForeColor = Theme.TextMuted,
-                Font = new Font("Segoe UI", 11f), AutoSize = true,
-                Cursor = Cursors.Hand, Top = 12,
-                Anchor = AnchorStyles.Top | AnchorStyles.Right,
-                Parent = _fieldDetailPanel,
-            };
-            
-            _fieldDetailPanel.Resize += (s, e) => btnCloseDetail.Left = _fieldDetailPanel.Width - 30;
-            
-            btnCloseDetail.MouseEnter += (s, e) => ((Label)s!).ForeColor = Theme.Danger;
-            btnCloseDetail.MouseLeave += (s, e) => ((Label)s!).ForeColor = Theme.TextMuted;
-            btnCloseDetail.Click += (s, e) => { CloseFieldDetail(); _fieldList.ClearSelected(); };
+    _fieldDetailPanel = new Panel
+    {
+        Left = RIGHT_LEFT, Top = 0,
+        Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom,
+        BackColor = Theme.BgSurface,
+        Visible = false,
+        AutoScroll = true,
+    };
+    _fieldDetailPanel.Paint += (s, e) =>
+    {
+        using var pen = new Pen(Theme.Border, 1);
+        e.Graphics.DrawRectangle(pen, 0, 0, _fieldDetailPanel.Width - 1, _fieldDetailPanel.Height - 1);
+        using var brush = new SolidBrush(Theme.Accent);
+        e.Graphics.FillRectangle(brush, 0, 0, _fieldDetailPanel.Width, 4);
+    };
+    _pageCatManager.Controls.Add(_fieldDetailPanel);
 
-            _lblFieldDetailTitle = new Label
-            {
-                Text = "", Left = 16, Top = 14,
-                Width = 300, Height = 22,
-                Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
-                ForeColor = Theme.TextPrimary,
-                AutoSize = false, Parent = _fieldDetailPanel,
-            };
+    _pageCatManager.Resize += (s, e) =>
+    {
+        _fieldDetailPanel.Width = Math.Max(200, _pageCatManager.ClientSize.Width - RIGHT_LEFT - 10); // Padding eklendi
+        _fieldDetailPanel.Height = _pageCatManager.ClientSize.Height;
+    };
 
-            _fieldDetailContent = new Panel
-            {
-                Left = 0, Top = 44,
-                Width = _fieldDetailPanel.Width,
-                Height = 0,
-                BackColor = Color.Transparent,
-                Parent = _fieldDetailPanel,
-                AutoScroll = false,
-            };
-            _fieldDetailPanel.Resize += (s, e) => _fieldDetailContent.Width = _fieldDetailPanel.Width;
-        }
+    var btnCloseDetail = new Label
+    {
+        Text = "✕", ForeColor = Theme.TextMuted,
+        Font = new Font("Segoe UI", 11f), AutoSize = true,
+        Cursor = Cursors.Hand, Top = 12,
+        Anchor = AnchorStyles.Top | AnchorStyles.Right,
+        Parent = _fieldDetailPanel,
+    };
+    
+    // Düzeltme: Kapatma butonu sağa yaslama mantığı güncellendi
+    _fieldDetailPanel.Resize += (s, e) => btnCloseDetail.Left = _fieldDetailPanel.Width - 30;
+    
+    btnCloseDetail.MouseEnter += (s, e) => ((Label)s!).ForeColor = Theme.Danger;
+    btnCloseDetail.MouseLeave += (s, e) => ((Label)s!).ForeColor = Theme.TextMuted;
+    btnCloseDetail.Click += (s, e) => { CloseFieldDetail(); _fieldList.ClearSelected(); };
 
+    _lblFieldDetailTitle = new Label
+    {
+        Text = "", Left = 16, Top = 14,
+        Width = 300, Height = 22,
+        Font = new Font("Segoe UI", 10.5f, FontStyle.Bold),
+        ForeColor = Theme.TextPrimary,
+        AutoSize = false, Parent = _fieldDetailPanel,
+    };
+
+    _fieldDetailContent = new Panel
+    {
+        Left = 0, Top = 44,
+        Width = _fieldDetailPanel.Width,
+        Height = 0,
+        BackColor = Color.Transparent,
+        Parent = _fieldDetailPanel,
+        AutoScroll = false,
+    };
+    _fieldDetailPanel.Resize += (s, e) => _fieldDetailContent.Width = _fieldDetailPanel.Width;
+}
         // ══════════════════════════════════════════════════════════════════
         //  FIELD DETAIL
         // ══════════════════════════════════════════════════════════════════
-        
+        private void ShowFieldDetail(string categoryKey, string fieldKey)
+        {
+            _fieldDetailPanel.Visible = true;
+            _lblFieldDetailTitle.Text = fieldKey;
+            _fieldDetailContent.Controls.Clear();
+
+            int y = 0;
+            var allComps = ComponentRepository.GetAll();
+
+            y += 4;
+            y = AddDetailSection(_fieldDetailContent, "USAGE STATISTICS", y);
+
+            var catComps   = allComps.Where(c => string.Equals(c.Category?.Trim(), categoryKey.Trim(), StringComparison.OrdinalIgnoreCase)).ToList();
+            var allWithField = allComps.Where(c => c.ExtraFields.ContainsKey(fieldKey) && !string.IsNullOrWhiteSpace(c.ExtraFields[fieldKey])).ToList();
+
+            int catTotal     = catComps.Count;
+            int usingInCat   = catComps.Count(c => c.ExtraFields.ContainsKey(fieldKey) && !string.IsNullOrWhiteSpace(c.ExtraFields[fieldKey]));
+            int usingGlobal  = allWithField.Count;
+            int catsUsingIt  = ComponentRepository.CategoryFields.Count(kvp => kvp.Value.Any(f => f.Key == fieldKey));
+
+            string catStatText = catTotal > 0
+                ? $"{usingInCat} / {catTotal} components in [{categoryKey}] use this field"
+                : $"No components in [{categoryKey}] yet";
+            AddDetailInfoLine(_fieldDetailContent, catStatText, Theme.TextSecondary, ref y);
+
+            if (catTotal > 0)
+            {
+                int barW  = Math.Max(60, (_fieldDetailPanel.Width - 48));
+                int fillW = catTotal > 0 ? (int)((double)usingInCat / catTotal * barW) : 0;
+                var track = new Panel { Left = 16, Top = y, Width = barW, Height = 8, BackColor = Theme.BgSurface3, Parent = _fieldDetailContent };
+                if (fillW > 0) track.Controls.Add(new Panel { Left = 0, Top = 0, Width = fillW, Height = 8, BackColor = Theme.AccentGreen });
+                _fieldDetailPanel.Resize += (s, e) =>
+                {
+                    int bw = Math.Max(60, _fieldDetailPanel.Width - 48);
+                    track.Width = bw;
+                    int fw2 = catTotal > 0 ? (int)((double)usingInCat / catTotal * bw) : 0;
+                    if (track.Controls.Count > 0) track.Controls[0].Width = fw2;
+                };
+                y += 18;
+                int pct = catTotal > 0 ? (int)((double)usingInCat / catTotal * 100) : 0;
+                AddDetailInfoLine(_fieldDetailContent, $"{pct}% coverage in [{categoryKey}]", Theme.TextMuted, ref y);
+            }
+
+            y += 6;
+
+            AddDetailInfoLine(_fieldDetailContent, $"Total usage across all categories: {usingGlobal} component(s)", Theme.TextSecondary, ref y);
+            AddDetailInfoLine(_fieldDetailContent, $"Used in {catsUsingIt} category(s) in total", Theme.TextMuted, ref y);
+
+            int approvedCount = allWithField.Count(c => c.Status == ComponentStatus.Approved);
+            int pendingCount  = allWithField.Count(c => c.Status == ComponentStatus.Pending);
+            y += 4;
+            AddDetailInfoLine(_fieldDetailContent, $"Approved: {approvedCount}   |   Pending: {pendingCount}", Theme.TextSecondary, ref y);
+
+            y += 4;
+
+            y = AddDetailSection(_fieldDetailContent, "PREDEFINED OPTIONS", y);
+
+            string[]? typeOpts = null;
+            if (fieldKey == "Type")
+            {
+                typeOpts = categoryKey switch
+                {
+                    "TRAN"    => new[] { "NPN", "PNP", "NPN&PNP" },
+                    "MOS"     => new[] { "N-Ch", "P-Ch" },
+                    "DC-DC"   => new[] { "Buck", "Buck-Boost", "Flyback", "SEPIC", "Cuk" },
+                    "LED-DRV" => new[] { "Linear", "Switching" },
+                    _         => new[] { "N/A" },
+                };
+            }
+
+            var effectiveOpts = typeOpts ?? (FieldComboOptions.TryGetValue(fieldKey, out var fo) ? fo : null);
+
+            if (effectiveOpts != null && effectiveOpts.Length > 0)
+            {
+                var optFlow = new FlowLayoutPanel
+                {
+                    Left = 16, Top = y,
+                    Width = _fieldDetailContent.Width - 32,
+                    AutoSize = true, FlowDirection = FlowDirection.LeftToRight,
+                    WrapContents = true, BackColor = Color.Transparent,
+                    Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
+                    Parent = _fieldDetailContent,
+                };
+                _fieldDetailContent.Resize += (s, e2) => optFlow.Width = _fieldDetailContent.Width - 32;
+
+                foreach (var opt in effectiveOpts)
+                {
+                    new Label
+                    {
+                        Text = opt,
+                        Font = Theme.FontSmall,
+                        ForeColor = Theme.TextSecondary,
+                        BackColor = Theme.BgSurface3,
+                        AutoSize = false,
+                        Width = Math.Max(40, TextRenderer.MeasureText(opt, Theme.FontSmall).Width + 16),
+                        Height = 20,
+                        TextAlign = ContentAlignment.MiddleCenter,
+                        Margin = new Padding(0, 0, 4, 4),
+                        Parent = optFlow,
+                    };
+                }
+                optFlow.PerformLayout();
+                y += optFlow.PreferredSize.Height + 8;
+            }
+            else
+            {
+                var freeLabel = new Label
+                {
+                    Text = "Free-text (no predefined options)",
+                    Font = Theme.FontSmall, ForeColor = Theme.TextMuted, AutoSize = false,
+                    Left = 16, Top = y, Width = _fieldDetailContent.Width - 32, Height = 20,
+                    Parent = _fieldDetailContent,
+                };
+                _fieldDetailContent.Resize += (s, e2) => freeLabel.Width = _fieldDetailContent.Width - 32;
+                y += 28;
+            }
+
+            y += 4;
+
+            y = AddDetailSection(_fieldDetailContent, "VALUE DISTRIBUTION (this category)", y);
+
+            var valueCounts = catComps
+                .Where(c => c.ExtraFields.ContainsKey(fieldKey) && !string.IsNullOrWhiteSpace(c.ExtraFields[fieldKey]))
+                .GroupBy(c => c.ExtraFields[fieldKey])
+                .OrderByDescending(g => g.Count())
+                .Take(10)
+                .ToList();
+
+            if (valueCounts.Count == 0)
+            {
+                AddDetailInfoLine(_fieldDetailContent, "No data yet", Theme.TextMuted, ref y);
+            }
+            else
+            {
+                int maxCount = valueCounts[0].Count();
+                Color[] barColors = { Theme.Accent, Theme.AccentGreen, Color.FromArgb(168,85,247), Theme.Warning };
+                int colorIdx = 0;
+
+                foreach (var grp in valueCounts)
+                {
+                    var color  = barColors[colorIdx % barColors.Length];
+                    int availW = Math.Max(80, _fieldDetailPanel.Width - 48 - 80 - 8 - 30);
+
+                    var rowPanel = new Panel { Left = 16, Top = y, Width = _fieldDetailContent.Width - 32, Height = 22, BackColor = Color.Transparent, Parent = _fieldDetailContent };
+                    _fieldDetailContent.Resize += (s, e2) => rowPanel.Width = _fieldDetailContent.Width - 32;
+
+                    rowPanel.Controls.Add(new Label { Text = grp.Key, Left = 0, Top = 3, Width = 80, Height = 16, ForeColor = Theme.TextSecondary, Font = Theme.FontSmall, AutoSize = false });
+
+                    int barMaxW = Math.Max(20, availW);
+                    int fillPx  = maxCount > 0 ? Math.Max(4, (int)((double)grp.Count() / maxCount * barMaxW)) : 0;
+
+                    var barTrack = new Panel { Left = 84, Top = 7, Width = barMaxW, Height = 8, BackColor = Theme.BgSurface3 };
+                    barTrack.Controls.Add(new Panel { Left = 0, Top = 0, Width = fillPx, Height = 8, BackColor = color });
+                    rowPanel.Controls.Add(barTrack);
+
+                    rowPanel.Resize += (s, e2) =>
+                    {
+                        int aw2 = Math.Max(20, rowPanel.Width - 80 - 8 - 30);
+                        barTrack.Width = aw2;
+                        int fp2 = maxCount > 0 ? Math.Max(4, (int)((double)grp.Count() / maxCount * aw2)) : 0;
+                        if (barTrack.Controls.Count > 0) barTrack.Controls[0].Width = fp2;
+                    };
+
+                    var lblCnt = new Label { Text = grp.Count().ToString(), Left = barMaxW + 88, Top = 3, Width = 28, Height = 16, ForeColor = Theme.TextMuted, Font = Theme.FontSmall, AutoSize = false, TextAlign = ContentAlignment.MiddleRight };
+                    rowPanel.Controls.Add(lblCnt);
+                    rowPanel.Resize += (s, e2) => lblCnt.Left = rowPanel.Width - 30;
+
+                    y += 24;
+                    colorIdx++;
+                }
+            }
+
+            y += 8;
+            y = AddDetailSection(_fieldDetailContent, "COMPONENTS USING THIS FIELD", y);
+
+            var compsUsingField = catComps
+                .Where(c => c.ExtraFields.ContainsKey(fieldKey) && !string.IsNullOrWhiteSpace(c.ExtraFields[fieldKey]))
+                .OrderBy(c => c.Description)
+                .ToList();
+
+            if (compsUsingField.Count == 0)
+            {
+                AddDetailInfoLine(_fieldDetailContent, "No components yet", Theme.TextMuted, ref y);
+            }
+            else
+            {
+                foreach (var comp in compsUsingField.Take(15))
+                {
+                    var rowPanel = new Panel
+                    {
+                        Left = 16, Top = y,
+                        Width = _fieldDetailContent.Width - 32,
+                        Height = 36,
+                        BackColor = Theme.BgSurface2,
+                        Margin = new Padding(0, 0, 0, 2),
+                        Parent = _fieldDetailContent,
+                    };
+                    _fieldDetailContent.Resize += (s, e2) => rowPanel.Width = _fieldDetailContent.Width - 32;
+
+                    new Label
+                    {
+                        Text = comp.Description,
+                        Font = new Font("Segoe UI", 8f, FontStyle.Bold),
+                        ForeColor = Theme.TextPrimary,
+                        Left = 8, Top = 2, Width = rowPanel.Width - 100, Height = 16,
+                        AutoSize = false, BackColor = Color.Transparent,
+                        Parent = rowPanel,
+                    };
+                    new Label
+                    {
+                        Text = comp.ExtraFields[fieldKey],
+                        Font = Theme.FontSmall,
+                        ForeColor = Theme.Accent,
+                        Left = 8, Top = 18, Width = rowPanel.Width - 100, Height = 14,
+                        AutoSize = false, BackColor = Color.Transparent,
+                        Parent = rowPanel,
+                    };
+
+                    var statusBadge = new Label
+                    {
+                        Text = comp.Status.ToString(),
+                        Font = new Font("Segoe UI", 7f, FontStyle.Bold),
+                        ForeColor = comp.Status == ComponentStatus.Approved ? Theme.AccentGreen : Theme.Warning,
+                        Left = rowPanel.Width - 90, Top = 10, Width = 82, Height = 16,
+                        AutoSize = false, BackColor = Color.Transparent,
+                        TextAlign = ContentAlignment.MiddleRight,
+                        Parent = rowPanel,
+                    };
+                    rowPanel.Resize += (s, e2) => statusBadge.Left = rowPanel.Width - 90;
+
+                    y += 40;
+                }
+
+                if (compsUsingField.Count > 15)
+                    AddDetailInfoLine(_fieldDetailContent, $"... and {compsUsingField.Count - 15} more", Theme.TextMuted, ref y);
+            }
+
+            _fieldDetailContent.Height = y + 16;
+        }
 
         private void CloseFieldDetail()
         {
@@ -2578,6 +2520,148 @@ private void Grid_CellEndEdit(object? sender, DataGridViewCellEventArgs e)
                 int ei = _exportCat.Items.IndexOf(prevExportSel ?? "");
                 _exportCat.SelectedIndex = ei >= 0 ? ei : 0;
             }
+        }
+
+        // ══════════════════════════════════════════════════════════════════
+        //  NEW CATEGORY DIALOG
+        // ══════════════════════════════════════════════════════════════════
+        private void ShowNewCategoryDialog()
+        {
+            var dlg = new Form
+            {
+                Text = "New Category",
+                Size = new Size(480, 520),
+                MinimumSize = new Size(400, 400),
+                StartPosition = FormStartPosition.CenterParent,
+                BackColor = Theme.BgMain,
+                Font = Theme.FontBody,
+                MinimizeBox = false, MaximizeBox = false,
+            };
+
+            // header stripe
+            var stripe = new Panel { Left = 0, Top = 0, Width = dlg.ClientSize.Width, Height = 4, BackColor = Theme.Accent, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right, Parent = dlg };
+            dlg.Resize += (s, e) => stripe.Width = dlg.ClientSize.Width;
+
+            int y = 20, lw = 120, fw = 280, fh = 32, lh = 28;
+
+            // Category name
+            new Label { Text = "Category Code *", Left = 20, Top = y, Width = lw, Height = lh, Font = Theme.FontBold, ForeColor = Theme.TextSecondary, TextAlign = ContentAlignment.MiddleLeft, Parent = dlg };
+            var tbCatName = new TextBox { Left = 20 + lw + 8, Top = y, Width = fw, Height = fh, BorderStyle = BorderStyle.FixedSingle, BackColor = Theme.BgSurface2, ForeColor = Theme.TextPrimary, Font = Theme.FontBody, PlaceholderText = "e.g. RELAY, FUSE, OPTO", Parent = dlg };
+            y += 44;
+
+            // Separator + fields header
+            new Panel { Left = 20, Top = y, Width = lw + fw + 8, Height = 1, BackColor = Theme.Border, Parent = dlg };
+            y += 12;
+            new Label { Text = "▸  Category Fields", Font = new Font("Segoe UI", 8.5f, FontStyle.Bold), ForeColor = Theme.Accent, Left = 20, Top = y, Width = 300, Height = 24, BackColor = Color.Transparent, Parent = dlg };
+            y += 28;
+            new Label { Text = "Field name (e.g. Voltage(V), Current(A))", Font = Theme.FontSmall, ForeColor = Theme.TextMuted, Left = 20 + lw + 8, Top = y, Width = fw, Height = 18, Parent = dlg };
+            y += 22;
+
+            // Scrollable field list panel
+            int fieldPanelTop = y;
+            var fieldScroll = new Panel
+            {
+                Left = 20 + lw + 8, Top = fieldPanelTop, Width = fw,
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Bottom,
+                BackColor = Theme.BgSurface2, AutoScroll = true,
+                BorderStyle = BorderStyle.FixedSingle, Parent = dlg,
+            };
+            dlg.Resize += (s, e) => fieldScroll.Height = Math.Max(80, dlg.ClientSize.Height - fieldPanelTop - 100);
+            fieldScroll.Height = Math.Max(80, dlg.ClientSize.Height - fieldPanelTop - 100);
+
+            var fieldNames = new List<TextBox>();
+
+            void AddFieldRow(string initial = "")
+            {
+                int rowH = 34, rowY = fieldNames.Count * rowH;
+                var rowPanel = new Panel { Left = 0, Top = rowY, Width = fieldScroll.ClientSize.Width, Height = rowH, BackColor = Color.Transparent, Parent = fieldScroll };
+                fieldScroll.Resize += (s, e) => rowPanel.Width = fieldScroll.ClientSize.Width;
+
+                var tb = new TextBox { Left = 4, Top = 2, Width = rowPanel.Width - 40, Height = 28, BorderStyle = BorderStyle.FixedSingle, BackColor = Theme.BgSurface, ForeColor = Theme.TextPrimary, Font = Theme.FontBody, Text = initial, Parent = rowPanel };
+                rowPanel.Resize += (s, e) => tb.Width = rowPanel.Width - 40;
+
+                var btnDel = new ModernButton { Text = "×", Style = ModernButton.BtnStyle.Danger, Width = 28, Height = 28, Left = rowPanel.Width - 32, Top = 2, Anchor = AnchorStyles.Top | AnchorStyles.Right, Parent = rowPanel };
+                btnDel.Click += (s2, e2) =>
+                {
+                    int idx = fieldNames.IndexOf(tb);
+                    if (idx < 0) return;
+                    fieldNames.RemoveAt(idx);
+                    fieldScroll.Controls.Remove(rowPanel);
+                    rowPanel.Dispose();
+                    for (int i = 0; i < fieldScroll.Controls.Count; i++)
+                        fieldScroll.Controls[i].Top = i * rowH;
+                };
+
+                fieldNames.Add(tb);
+            }
+
+            // Start with 3 empty rows
+            AddFieldRow(); AddFieldRow(); AddFieldRow();
+
+            // "+ Add Field" button (left of the scroll panel)
+            var btnAddField = new ModernButton
+            {
+                Text = "+ Add Field", Style = ModernButton.BtnStyle.Secondary,
+                Width = lw, Height = 28, Left = 20,
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Left, Parent = dlg,
+            };
+            dlg.Resize += (s, e) => btnAddField.Top = dlg.ClientSize.Height - 95;
+            btnAddField.Top = dlg.ClientSize.Height - 95;
+            btnAddField.Click += (s, e) => AddFieldRow();
+
+            // Bottom buttons
+            var sep2 = new Panel { Left = 0, Height = 1, BackColor = Theme.Border, Anchor = AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right, Parent = dlg };
+            dlg.Resize += (s, e) => { sep2.Top = dlg.ClientSize.Height - 58; sep2.Width = dlg.ClientSize.Width; };
+            sep2.Top = dlg.ClientSize.Height - 58; sep2.Width = dlg.ClientSize.Width;
+
+            var btnSave = new ModernButton { Text = "Create Category", Style = ModernButton.BtnStyle.Success, Width = 150, Height = 34, Left = 20, Anchor = AnchorStyles.Bottom | AnchorStyles.Left, Parent = dlg };
+            var btnCancel = new ModernButton { Text = "Cancel", Style = ModernButton.BtnStyle.Secondary, Width = 80, Height = 34, Left = 178, Anchor = AnchorStyles.Bottom | AnchorStyles.Left, Parent = dlg };
+            dlg.Resize += (s, e) => { btnSave.Top = dlg.ClientSize.Height - 46; btnCancel.Top = dlg.ClientSize.Height - 46; };
+            btnSave.Top = dlg.ClientSize.Height - 46; btnCancel.Top = dlg.ClientSize.Height - 46;
+
+            btnCancel.Click += (s, e) => dlg.Close();
+
+            btnSave.Click += (s, e) =>
+            {
+                var catCode = tbCatName.Text.Trim().ToUpper();
+                if (string.IsNullOrWhiteSpace(catCode))
+                { MessageBox.Show("Category code is required.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+                if (ComponentRepository.CategoryFields.ContainsKey(catCode))
+                { MessageBox.Show($"'{catCode}' already exists.", "Warning", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
+
+                ComponentRepository.AddCategory(catCode);
+
+                foreach (var tb in fieldNames)
+                {
+                    var key = tb.Text.Trim();
+                    if (!string.IsNullOrWhiteSpace(key))
+                        ComponentRepository.AddFieldToCategory(catCode, key, key);
+                }
+
+                // Refresh _addCat combobox
+                var prevSel = _addCat.SelectedItem?.ToString();
+                _addCat.Items.Clear();
+                foreach (var c in ComponentRepository.AllCategories.OrderBy(x => x)) _addCat.Items.Add(c);
+                var newIdx = _addCat.Items.IndexOf(catCode);
+                _addCat.SelectedIndex = newIdx >= 0 ? newIdx : (prevSel != null ? _addCat.Items.IndexOf(prevSel) : -1);
+
+                // Refresh _filterCat (Catalog filter)
+                if (_filterCat != null)
+                {
+                    var prevFilter = _filterCat.SelectedItem?.ToString();
+                    _filterCat.Items.Clear();
+                    _filterCat.Items.Add("All Categories");
+                    foreach (var c in ComponentRepository.AllCategories.OrderBy(x => x)) _filterCat.Items.Add(c);
+                    int fi = _filterCat.Items.IndexOf(prevFilter ?? "");
+                    _filterCat.SelectedIndex = fi >= 0 ? fi : 0;
+                }
+
+                RefreshCategoryManager();
+                MessageBox.Show($"Category '{catCode}' created with {fieldNames.Count(f => !string.IsNullOrWhiteSpace(f.Text))} field(s).", "Created", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                dlg.Close();
+            };
+
+            dlg.ShowDialog(this);
         }
 
         private void RefreshFieldList()

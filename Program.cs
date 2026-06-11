@@ -6,6 +6,10 @@ namespace CMS
 {
     internal static class Program
     {
+        public static string CurrentUser { get; private set; } = "";
+        public static string CurrentRole { get; private set; } = "";
+        public static bool   ShouldRelogin { get; set; } = false;
+
         [STAThread]
         static void Main()
         {
@@ -13,7 +17,26 @@ namespace CMS
             Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new MainForm());
+
+            while (true)
+            {
+                using var loginForm = new LoginForm();
+                if (loginForm.ShowDialog() != DialogResult.OK)
+                    break; // User closed login → exit app
+
+                CurrentUser   = loginForm.LoggedInUser;
+                CurrentRole   = loginForm.LoggedInRole;
+                ShouldRelogin = false;
+
+                Application.Run(new MainForm());
+
+                if (!ShouldRelogin)
+                    break; // Normal close → exit app
+
+                // ShouldRelogin = true → loop back to login screen
+                CurrentUser = "";
+                CurrentRole = "";
+            }
         }
     }
 }

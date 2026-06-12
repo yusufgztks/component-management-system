@@ -100,7 +100,7 @@ namespace CMS.Views
             _btnLogin.Click += (s, e) => DoLogin();
 
             // Footer
-            var lblVer = new Label { Text = "© 2024 Component Management System", Font = new Font("Segoe UI", 7.5f), ForeColor = Color.FromArgb(80, 96, 120), Left = 0, Top = ClientSize.Height - 46, Width = ClientSize.Width, TextAlign = ContentAlignment.MiddleCenter };
+            var lblVer = new Label { Text = "©Component Management System", Font = new Font("Segoe UI", 7.5f), ForeColor = Color.FromArgb(80, 96, 120), Left = 0, Top = ClientSize.Height - 46, Width = ClientSize.Width, TextAlign = ContentAlignment.MiddleCenter };
             Controls.Add(lblVer);
 
             AcceptButton = _btnLogin;

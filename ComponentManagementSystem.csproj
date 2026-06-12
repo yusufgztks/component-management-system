@@ -16,4 +16,10 @@
     <PackageReference Include="Microsoft.Data.SqlClient" Version="7.0.1" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Compile Remove="cms_output\**\*.cs" />
+    <Compile Remove="component-management-system\**\*.cs" />
+    <Compile Remove="obj\**\*.cs" />
+    <Compile Remove="bin\**\*.cs" />
+  </ItemGroup>
 </Project>

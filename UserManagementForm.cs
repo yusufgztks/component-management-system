@@ -17,9 +17,10 @@ namespace CMS.Views
         private TextBox  _txtNewPass = null!;
         private ComboBox _cmbRole    = null!;
 
-        private TextBox _txtChgPass    = null!;
-        private TextBox _txtChgConfirm = null!;
-        private Label   _lblChgTarget  = null!;
+        private TextBox  _txtChgPass    = null!;
+        private TextBox  _txtChgConfirm = null!;
+        private Label    _lblSelTarget  = null!;
+        private ComboBox _cmbChgRole    = null!;
 
         private int    _selectedUserId   = -1;
         private string _selectedUsername = "";
@@ -143,26 +144,59 @@ namespace CMS.Views
             var btnAdd = new ModernButton { Text = "Add User", Style = ModernButton.BtnStyle.Success, Left = 0, Top = cy, Width = cardAdd.Width, Height = 34, Parent = cardAdd };
             btnAdd.Click += BtnAddUser_Click;
 
-            // ── Change Password ───────────────────────────────────────────
+            // ── Manage Selected User ────────────────────────────────────────
             y += 12;
-            var cardPwd = MakeCard("Change Password", ref y, 210);
-            int py = 36;
-            _lblChgTarget = new Label { Text = "← Select a user from the list", Font = new Font("Segoe UI", 8.5f, FontStyle.Italic), ForeColor = Theme.TextMuted, Left = 0, Top = py, AutoSize = true, Parent = cardPwd };
-            py += 28;
-            FieldLabel("New Password *", cardPwd, py);
-            _txtChgPass = FieldBox(cardPwd, py, isPassword: true); py += 44;
-            FieldLabel("Confirm *", cardPwd, py);
-            _txtChgConfirm = FieldBox(cardPwd, py, isPassword: true); py += 44;
-            var btnChgPwd = new ModernButton { Text = "Update Password", Style = ModernButton.BtnStyle.Primary, Left = 0, Top = py, Width = cardPwd.Width, Height = 34, Parent = cardPwd };
-            btnChgPwd.Click += BtnChangePwd_Click;
+            var cardMng = MakeCard("Manage Selected User", ref y, 400);
+            int my = 36;
+            _lblSelTarget = new Label { Text = "← Select a user from the list", Font = new Font("Segoe UI", 8.5f, FontStyle.Italic), ForeColor = Theme.TextMuted, Left = 0, Top = my, AutoSize = true, Parent = cardMng };
+            my += 30;
 
-            // ── User Actions ──────────────────────────────────────────────
-            y += 12;
-            var cardOps = MakeCard("User Actions", ref y, 140);
-            var btnToggle = new ModernButton { Text = "Toggle Active / Inactive", Style = ModernButton.BtnStyle.Secondary, Left = 0, Top = 36, Width = cardOps.Width, Height = 34, Parent = cardOps };
+            // Role change
+            FieldLabel("Role", cardMng, my);
+            _cmbChgRole = new ComboBox { Left = 120, Top = my, Width = cardMng.Width - 136, DropDownStyle = ComboBoxStyle.DropDownList, Font = Theme.FontBody, BackColor = Theme.BgSurface2, ForeColor = Theme.TextPrimary, FlatStyle = FlatStyle.Flat, Parent = cardMng };
+            _cmbChgRole.Items.AddRange(new object[] { "viewer", "editor", "admin" });
+            my += 44;
+            var btnChgRole = new ModernButton { Text = "Update Role", Style = ModernButton.BtnStyle.Primary, Left = 0, Top = my, Width = cardMng.Width, Height = 32, Parent = cardMng };
+            btnChgRole.Click += BtnChangeRole_Click;
+            my += 44;
+
+            // Password change
+            FieldLabel("New Password", cardMng, my);
+            _txtChgPass = FieldBox(cardMng, my, isPassword: true); my += 44;
+            FieldLabel("Confirm", cardMng, my);
+            _txtChgConfirm = FieldBox(cardMng, my, isPassword: true); my += 44;
+            var btnChgPwd = new ModernButton { Text = "Update Password", Style = ModernButton.BtnStyle.Primary, Left = 0, Top = my, Width = cardMng.Width, Height = 32, Parent = cardMng };
+            btnChgPwd.Click += BtnChangePwd_Click;
+            my += 44;
+
+            // Status + delete
+            var btnToggle = new ModernButton { Text = "Toggle Active / Inactive", Style = ModernButton.BtnStyle.Secondary, Left = 0, Top = my, Width = cardMng.Width, Height = 32, Parent = cardMng };
             btnToggle.Click += BtnToggleActive_Click;
-            var btnDelete = new ModernButton { Text = "Delete User", Style = ModernButton.BtnStyle.Danger, Left = 0, Top = 80, Width = cardOps.Width, Height = 34, Parent = cardOps };
+            my += 40;
+            var btnDelete = new ModernButton { Text = "Delete User", Style = ModernButton.BtnStyle.Danger, Left = 0, Top = my, Width = cardMng.Width, Height = 32, Parent = cardMng };
             btnDelete.Click += BtnDeleteUser_Click;
+        }
+
+        private void BtnChangeRole_Click(object? sender, EventArgs e)
+        {
+            if (_selectedUserId < 0) { Warn("Please select a user from the list."); return; }
+            var role = _cmbChgRole.SelectedItem?.ToString();
+            if (string.IsNullOrEmpty(role)) { Warn("Please select a role."); return; }
+
+            if (MessageBox.Show($"Set role of '{_selectedUsername}' to '{role}'?", "Update Role", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes) return;
+
+            try
+            {
+                using var conn = new SqlConnection(CMS.Data.ComponentRepository.ConnectionString);
+                conn.Open();
+                using var cmd = new SqlCommand("UPDATE dbo.Users SET Role = @r WHERE Id = @id", conn);
+                cmd.Parameters.AddWithValue("@r",  role);
+                cmd.Parameters.AddWithValue("@id", _selectedUserId);
+                cmd.ExecuteNonQuery();
+                LoadUsers();
+                SetStatus($"Role of '{_selectedUsername}' set to '{role}'.");
+            }
+            catch (Exception ex) { Warn($"Error: {ex.Message}"); }
         }
 
         // ── Helpers ───────────────────────────────────────────────────────
@@ -209,7 +243,13 @@ namespace CMS.Views
             var row = _grid.SelectedRows[0];
             _selectedUserId   = Convert.ToInt32(row.Cells["Id"].Value);
             _selectedUsername = row.Cells["Username"].Value?.ToString() ?? "";
-            if (_lblChgTarget != null) _lblChgTarget.Text = $"Target: {_selectedUsername}";
+            var currentRole   = row.Cells["Role"].Value?.ToString() ?? "";
+            if (_lblSelTarget != null) _lblSelTarget.Text = $"Target: {_selectedUsername}";
+            if (_cmbChgRole != null)
+            {
+                int idx = _cmbChgRole.Items.IndexOf(currentRole);
+                _cmbChgRole.SelectedIndex = idx >= 0 ? idx : 0;
+            }
         }
 
         private void BtnAddUser_Click(object? sender, EventArgs e)

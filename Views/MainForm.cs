@@ -269,7 +269,7 @@ namespace CMS.Views
 
             AddNavSection(flow, "SETTINGS");
             _navCatManager = AddNavItem(flow, "", "catmanager", "Category Manager");
-            _navUserMgmt   = AddNavItem(flow, "👤", "usermgmt",  "User Management");
+            _navUserMgmt   = AddNavItem(flow, "", "usermgmt",  "User Management");
 
             AddNavSection(flow, "TOOLS");
             AddNavItem(flow, "", "export",     "Export / Import");

@@ -206,6 +206,10 @@ namespace CMS.Views
             Font            = Theme.FontBody;
             AutoScaleMode   = AutoScaleMode.Dpi;
             AutoScaleDimensions = new SizeF(96F, 96F);
+             WindowState     = FormWindowState.Maximized;
+             WindowState = FormWindowState.Maximized;
+FormBorderStyle = FormBorderStyle.FixedSingle;
+MaximizeBox = false;
         }
 
         private void BuildLayout()
@@ -387,7 +391,7 @@ namespace CMS.Views
             bool isAdmin  = _currentRole.Equals("admin",  StringComparison.OrdinalIgnoreCase);
             bool isEditor = _currentRole.Equals("editor", StringComparison.OrdinalIgnoreCase) || isAdmin;
 
-            if ((key == "add" || key == "export") && !isEditor)
+            if (key == "add" && !isEditor)
             { MessageBox.Show("Access denied.", "Access Denied", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
             if ((key == "approval" || key == "catmanager" || key == "usermgmt") && !isAdmin)
             { MessageBox.Show("Access denied.", "Access Denied", MessageBoxButtons.OK, MessageBoxIcon.Warning); return; }
@@ -1169,18 +1173,16 @@ namespace CMS.Views
 
             var sep      = new Panel { Left=32, Width=560, Height=1, BackColor=Theme.Border, Parent=card };
             var btnAdd   = new ModernButton { Text="Add Component", Style=ModernButton.BtnStyle.Success, Width=160, Height=36, Left=32, Parent=card };
-            var btnReset = new ModernButton { Text="Reset", Style=ModernButton.BtnStyle.Secondary, Width=90, Height=36, Left=200, Parent=card };
 
             void Reposition()
             {
                 int baseY = extraTop + _extraPanel.Height + 12;
-                sep.Top = baseY; btnAdd.Top = baseY+12; btnReset.Top = baseY+12;
+                sep.Top = baseY; btnAdd.Top = baseY+12;
                 card.Height = baseY+70; _extraPanel.Width = card.Width;
             }
 
             _addCat.SelectedIndexChanged += (s, e) => { RebuildExtraFields(); Reposition(); };
             btnAdd.Click   += BtnAddComponent_Click;
-            btnReset.Click += (s, e) => ClearAddForm();
             Reposition();
         }
 
@@ -1259,12 +1261,8 @@ namespace CMS.Views
                 foreach (var gf in ComponentRepository.GlobalFields)
                 {
                     new Label { Text=gf.Label, Left=lx, Top=y+2, Width=lw, Height=fh, Font=Theme.FontBold, ForeColor=Theme.TextSecondary, TextAlign=ContentAlignment.MiddleLeft, BackColor=Color.Transparent, Parent=_extraPanel };
-                    var cb = new ComboBox { Left=fx, Top=y, Width=fw, Height=fh, DropDownStyle=ComboBoxStyle.DropDown, Font=Theme.FontBody, BackColor=Theme.BgSurface2, ForeColor=Theme.TextPrimary, FlatStyle=FlatStyle.Flat, Parent=_extraPanel, AutoCompleteMode=AutoCompleteMode.SuggestAppend, AutoCompleteSource=AutoCompleteSource.ListItems };
-                    if (ComponentRepository.GlobalFieldValues.TryGetValue(gf.Key, out var pastVals))
-                        foreach (var v in pastVals) cb.Items.Add(v);
-                    var capturedKey = gf.Key;
-                    cb.Leave += (s, e) => { if (!string.IsNullOrWhiteSpace(cb.Text)) ComponentRepository.RecordGlobalFieldValue(capturedKey, cb.Text.Trim()); };
-                    _extraBoxes.Add((gf.Key, cb));
+                    var tb = new TextBox { Left=fx, Top=y, Width=fw, Height=fh, BorderStyle=BorderStyle.FixedSingle, BackColor=Theme.BgSurface2, ForeColor=Theme.TextPrimary, Font=Theme.FontBody, Parent=_extraPanel };
+                    _extraBoxes.Add((gf.Key, tb));
                     y += rowH;
                 }
                 hasAny = true;
@@ -1670,13 +1668,74 @@ namespace CMS.Views
 
             if (!System.IO.File.Exists(templatePath))
             {
-                MessageBox.Show("Error", "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Şablon bulunamadı:\n" + templatePath, "Hata", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
 
+            int currentRow = 6;
             try
             {
-                using (var workbook = new XLWorkbook(templatePath))
+                // Şablondan orijinal tablo XML'ini oku
+                string originalTableXml = "";
+                string tableEntryName = "";
+                using (var templateZip = System.IO.Compression.ZipFile.OpenRead(templatePath))
+                {
+                    var te = templateZip.Entries.FirstOrDefault(e => e.FullName.StartsWith("xl/tables/"));
+                    if (te != null)
+                    {
+                        tableEntryName = te.FullName;
+                        using (var sr = new System.IO.StreamReader(te.Open()))
+                            originalTableXml = sr.ReadToEnd();
+                    }
+                }
+
+                // Tablosuz geçici şablon oluştur
+                string tempTemplate = System.IO.Path.GetTempFileName() + ".xlsx";
+                System.IO.File.Copy(templatePath, tempTemplate, true);
+                using (var zip = System.IO.Compression.ZipFile.Open(tempTemplate, System.IO.Compression.ZipArchiveMode.Update))
+                {
+                    // table1.xml kaldır
+                    zip.Entries.FirstOrDefault(e => e.FullName.StartsWith("xl/tables/"))?.Delete();
+
+                    // [Content_Types].xml'den tablo Override'ını kaldır
+                    var ctEntry = zip.Entries.FirstOrDefault(e => e.FullName == "[Content_Types].xml");
+                    if (ctEntry != null)
+                    {
+                        string ct;
+                        using (var sr = new System.IO.StreamReader(ctEntry.Open())) ct = sr.ReadToEnd();
+                        ct = System.Text.RegularExpressions.Regex.Replace(ct, @"<Override[^>]*tables/table1[^>]*/>", "");
+                        ctEntry.Delete();
+                        var newCt = zip.CreateEntry("[Content_Types].xml");
+                        using (var sw = new System.IO.StreamWriter(newCt.Open())) sw.Write(ct);
+                    }
+
+                    // sheet2.xml'den tableParts kaldır
+                    var wsEntry = zip.Entries.FirstOrDefault(e => e.FullName == "xl/worksheets/sheet2.xml");
+                    if (wsEntry != null)
+                    {
+                        string ws;
+                        using (var sr = new System.IO.StreamReader(wsEntry.Open())) ws = sr.ReadToEnd();
+                        ws = System.Text.RegularExpressions.Regex.Replace(ws, @"<tableParts[^/]*/?>.*?</tableParts>|<tableParts[^/]*/>", "", System.Text.RegularExpressions.RegexOptions.Singleline);
+                        wsEntry.Delete();
+                        var newWs = zip.CreateEntry("xl/worksheets/sheet2.xml");
+                        using (var sw = new System.IO.StreamWriter(newWs.Open())) sw.Write(ws);
+                    }
+
+                    // sheet2.xml.rels'den tablo referansını kaldır
+                    var relsEntry = zip.Entries.FirstOrDefault(e => e.FullName == "xl/worksheets/_rels/sheet2.xml.rels");
+                    if (relsEntry != null)
+                    {
+                        string rels;
+                        using (var sr = new System.IO.StreamReader(relsEntry.Open())) rels = sr.ReadToEnd();
+                        rels = System.Text.RegularExpressions.Regex.Replace(rels, @"<Relationship[^>]*table[^>]*/>", "");
+                        relsEntry.Delete();
+                        var newRels = zip.CreateEntry("xl/worksheets/_rels/sheet2.xml.rels");
+                        using (var sw = new System.IO.StreamWriter(newRels.Open())) sw.Write(rels);
+                    }
+                }
+
+                // Geçici şablonla ClosedXML işlemi
+                using (var workbook = new XLWorkbook(tempTemplate))
                 {
                     var ws = workbook.Worksheet("E-BOM");
 
@@ -1691,7 +1750,6 @@ namespace CMS.Views
                     }
 
                     int templateRow = 6;
-                    int currentRow  = 6;
 
                     foreach (var item in data)
                     {
@@ -1726,11 +1784,79 @@ namespace CMS.Views
                     ws.Column(7).Width = 22;
                     ws.Column(8).Width = 16;
 
-                    var table = ws.Tables.FirstOrDefault();
-                    if (table != null)
-                        table.Resize(ws.Range(5, 2, currentRow - 1, 13));
-
                     workbook.SaveAs(path);
+                }
+
+                System.IO.File.Delete(tempTemplate);
+
+                // Tabloyu güncel ref ile geri ekle
+                if (!string.IsNullOrEmpty(originalTableXml) && !string.IsNullOrEmpty(tableEntryName))
+                {
+                    string newRef = $"B5:M{currentRow - 1}";
+                    string patchedTableXml = System.Text.RegularExpressions.Regex.Replace(
+                        originalTableXml, @"ref=""B\d+:M\d+""", $"ref=\"{newRef}\"");
+
+                    using (var zip = System.IO.Compression.ZipFile.Open(path, System.IO.Compression.ZipArchiveMode.Update))
+                    {
+                        // table1.xml ekle
+                        var newTableEntry = zip.CreateEntry(tableEntryName);
+                        using (var sw = new System.IO.StreamWriter(newTableEntry.Open()))
+                            sw.Write(patchedTableXml);
+
+                        // [Content_Types].xml'e tablo Override ekle
+                        var ctEntry = zip.Entries.FirstOrDefault(e => e.FullName == "[Content_Types].xml");
+                        if (ctEntry != null)
+                        {
+                            string ct;
+                            using (var sr = new System.IO.StreamReader(ctEntry.Open())) ct = sr.ReadToEnd();
+                            if (!ct.Contains("tables/table1"))
+                                ct = ct.Replace("</Types>", "<Override PartName=\"/xl/tables/table1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml\"/></Types>");
+                            ctEntry.Delete();
+                            var newCt = zip.CreateEntry("[Content_Types].xml");
+                            using (var sw = new System.IO.StreamWriter(newCt.Open())) sw.Write(ct);
+                        }
+
+                        // sheet2.xml'e tableParts geri ekle
+                        var wsEntry = zip.Entries.FirstOrDefault(e => e.FullName == "xl/worksheets/sheet2.xml");
+                        if (wsEntry != null)
+                        {
+                            string wsXml;
+                            using (var sr = new System.IO.StreamReader(wsEntry.Open())) wsXml = sr.ReadToEnd();
+                            // ClosedXML boş <x:tableParts count="0"/> yazar, onu dolu olanla değiştir
+                            // x: prefix'li ve prefix'siz her iki versiyonu da handle et
+                            wsXml = System.Text.RegularExpressions.Regex.Replace(
+                                wsXml,
+                                @"<(x:)?tableParts[^/]*/>([\s\S]*?)</(x:)?worksheet>",
+                                m => {
+                                    string prefix = m.Groups[3].Value; // worksheet prefix
+                                    string tp = string.IsNullOrEmpty(prefix) ? "" : "x:";
+                                    return $"<{tp}tableParts count=\"1\"><{tp}tablePart r:id=\"rId9\"/></{tp}tableParts></{prefix}worksheet>";
+                                });
+                            wsEntry.Delete();
+                            var newWs = zip.CreateEntry("xl/worksheets/sheet2.xml");
+                            using (var sw = new System.IO.StreamWriter(newWs.Open())) sw.Write(wsXml);
+                        }
+
+                        // sheet2.xml.rels'e tablo referansı geri ekle
+                        var relsEntry = zip.Entries.FirstOrDefault(e => e.FullName == "xl/worksheets/_rels/sheet2.xml.rels");
+                        if (relsEntry != null)
+                        {
+                            string rels;
+                            using (var sr = new System.IO.StreamReader(relsEntry.Open())) rels = sr.ReadToEnd();
+                            if (!rels.Contains("table"))
+                                rels = rels.Replace("</Relationships>", "<Relationship Id=\"rId9\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/table\" Target=\"../tables/table1.xml\"/></Relationships>");
+                            relsEntry.Delete();
+                            var newRels = zip.CreateEntry("xl/worksheets/_rels/sheet2.xml.rels");
+                            using (var sw = new System.IO.StreamWriter(newRels.Open())) sw.Write(rels);
+                        }
+                        else
+                        {
+                            // _rels dosyası yoksa oluştur
+                            var newRels = zip.CreateEntry("xl/worksheets/_rels/sheet2.xml.rels");
+                            using (var sw = new System.IO.StreamWriter(newRels.Open()))
+                                sw.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId9\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/table\" Target=\"../tables/table1.xml\"/></Relationships>");
+                        }
+                    }
                 }
             }
             catch (Exception ex) { MessageBox.Show("Error: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }

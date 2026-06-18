@@ -173,3 +173,5 @@ namespace CMS.Views
         private void ShowError(string msg) { _lblError.Text = msg; _lblError.Invalidate(); }
     }
 }
+
+

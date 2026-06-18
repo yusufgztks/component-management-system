@@ -1316,11 +1316,15 @@ MaximizeBox = false;
             _content.Controls.Add(_pageApproval);
 
             var infoBar = new Panel { Left=0, Top=0, Height=40, BackColor=Color.FromArgb(254,243,199), Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right };
-            new Label { Text="Pending components appear here for review. Approved components are automatically moved to catalog.", ForeColor=Color.FromArgb(120,80,4), Font=Theme.FontBody, AutoSize=true, Left=12, Top=10, Parent=infoBar };
+            new Label { Text="Double-click cells to edit. Pending components require FekaNo and PartNumber before approval.", ForeColor=Color.FromArgb(120,80,4), Font=Theme.FontBody, AutoSize=true, Left=12, Top=10, Parent=infoBar };
             _pageApproval.Controls.Add(infoBar);
             _pageApproval.Resize += (s, e) => infoBar.Width = _pageApproval.ClientSize.Width;
 
-            var btnApproveAll = new ModernButton { Text="Approve All", Style=ModernButton.BtnStyle.Success, Width=120, Height=32, Left=0, Top=50, Parent=_pageApproval };
+            // Kontrol paneli
+            var btnPanel = new Panel { Left=0, Top=50, Height=32, BackColor=Theme.BgMain, Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right };
+            _pageApproval.Controls.Add(btnPanel);
+
+            var btnApproveAll = new ModernButton { Text="Approve All", Style=ModernButton.BtnStyle.Success, Width=120, Height=32, Left=0, Top=0, Parent=btnPanel };
             btnApproveAll.Click += (s, e) =>
             {
                 var pending = ComponentRepository.GetAll().Where(c => c.IsCustom && c.Status == ComponentStatus.Pending).ToList();
@@ -1333,75 +1337,137 @@ MaximizeBox = false;
                 }
             };
 
-            _approvalGrid = BuildGrid();
-            _approvalGrid.Left=0; _approvalGrid.Top=92;
-            _approvalGrid.Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right|AnchorStyles.Bottom;
-            _approvalGrid.Width=_pageApproval.ClientSize.Width;
-            _approvalGrid.Height=_pageApproval.ClientSize.Height-92;
-            _approvalGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-            _approvalGrid.MultiSelect = false;
-
-            RefreshApproval();
-
-            var btnColApprove = new DataGridViewButtonColumn { Name="BtnApprove", HeaderText="Approve", Text="Approve", UseColumnTextForButtonValue=true, Width=90, FlatStyle=FlatStyle.Flat };
-            var btnColDelete  = new DataGridViewButtonColumn { Name="BtnDelete",  HeaderText="Delete",  Text="Delete",  UseColumnTextForButtonValue=true, Width=80, FlatStyle=FlatStyle.Flat };
-            
-            if (_approvalGrid.Columns["Status"] != null)
+            var btnApproveSelected = new ModernButton { Text="Approve Selected", Style=ModernButton.BtnStyle.Success, Width=140, Height=32, Left=130, Top=0, Parent=btnPanel };
+            btnApproveSelected.Click += (s, e) =>
             {
-                int statusIdx = _approvalGrid.Columns["Status"]!.Index;
-                _approvalGrid.Columns.Insert(statusIdx + 1, btnColApprove);
-                _approvalGrid.Columns.Insert(statusIdx + 2, btnColDelete);
-            }
+                var selected = _approvalGrid.SelectedRows.Cast<DataGridViewRow>().ToList();
+                if (selected.Count == 0) { MessageBox.Show("Please select components to approve.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
 
-            _approvalGrid.CellFormatting += (s, e) =>
-            {
-                if (e.RowIndex < 0) return;
-                if (_approvalGrid.Columns[e.ColumnIndex].Name == "BtnApprove")
+                // FekaNo ve PartNumber validasyon
+                var invalidRows = new List<int>();
+                foreach (var row in selected)
                 {
-                    e.CellStyle.BackColor = Color.FromArgb(32, 193, 148);
-                    e.CellStyle.ForeColor = Color.White;
-                    e.CellStyle.Font = new Font("Segoe UI", 8f, FontStyle.Bold);
+                    var fekaNo = row.Cells["FekaNo"].Value?.ToString()?.Trim() ?? "";
+                    var partNum = row.Cells["PartNumber"].Value?.ToString()?.Trim() ?? "";
+                    if (string.IsNullOrEmpty(fekaNo) || string.IsNullOrEmpty(partNum))
+                        invalidRows.Add(_approvalGrid.Rows.IndexOf(row));
                 }
-                else if (_approvalGrid.Columns[e.ColumnIndex].Name == "BtnDelete")
+
+                if (invalidRows.Count > 0)
                 {
-                    e.CellStyle.BackColor = Color.FromArgb(220, 80, 80);
-                    e.CellStyle.ForeColor = Color.White;
-                    e.CellStyle.Font = new Font("Segoe UI", 8f, FontStyle.Bold);
+                    MessageBox.Show($"Cannot approve components with empty FekaNo or PartNumber.\n\nRow(s): {string.Join(", ", invalidRows.Select(i => i + 1))}\n\nPlease fill in missing values first.", 
+                        "Validation Error", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                if (MessageBox.Show($"Approve {selected.Count} component(s)?", "Approve Selected", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                {
+                    int approvedCount = 0;
+                    foreach (var row in selected)
+                    {
+                        if (int.TryParse(row.Cells["ID"].Value?.ToString(), out int id))
+                        {
+                            ComponentRepository.Approve(id);
+                            approvedCount++;
+                        }
+                    }
+                    RefreshApproval(); RefreshApprovalBadge();
+                    MessageBox.Show($"{approvedCount} component(s) approved and moved to catalog.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
             };
 
-            _approvalGrid.CellClick += (s, e) =>
+            var btnDeleteSelected = new ModernButton { Text="Delete Selected", Style=ModernButton.BtnStyle.Danger, Width=130, Height=32, Left=280, Top=0, Parent=btnPanel };
+            btnDeleteSelected.Click += (s, e) =>
+            {
+                var selected = _approvalGrid.SelectedRows.Cast<DataGridViewRow>().ToList();
+                if (selected.Count == 0) { MessageBox.Show("Please select components to delete.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
+
+                if (MessageBox.Show($"Delete {selected.Count} component(s)? This cannot be undone.", "Confirm Delete", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                {
+                    int deletedCount = 0;
+                    foreach (var row in selected)
+                    {
+                        if (int.TryParse(row.Cells["ID"].Value?.ToString(), out int id))
+                        {
+                            ComponentRepository.Delete(id);
+                            deletedCount++;
+                        }
+                    }
+                    RefreshApproval(); RefreshApprovalBadge();
+                    MessageBox.Show($"{deletedCount} component(s) deleted.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                }
+            };
+
+            _approvalGrid = BuildGrid();
+            _approvalGrid.ReadOnly = false;  // ✅ Düzenleme için ReadOnly kapalı!
+            
+            // Düzenlenebilir sütunları false yap
+            foreach (DataGridViewColumn col in _approvalGrid.Columns)
+            {
+                if (col.Name == "FekaNo" || col.Name == "PartNumber" || 
+                    col.Name == "Manufacturer" || col.Name == "Rating" || col.Name == "Process")
+                    col.ReadOnly = false;
+                else
+                    col.ReadOnly = true;
+            }
+            
+            _approvalGrid.Left=0; _approvalGrid.Top=90;
+            _approvalGrid.Anchor=AnchorStyles.Top|AnchorStyles.Left|AnchorStyles.Right|AnchorStyles.Bottom;
+            _approvalGrid.Width=_pageApproval.ClientSize.Width;
+            _approvalGrid.Height=_pageApproval.ClientSize.Height-90;
+            _approvalGrid.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+            _approvalGrid.MultiSelect = true;  // ✅ Çoklu seçim açık!
+            _approvalGrid.AllowUserToAddRows = false;
+
+            RefreshApproval();
+
+            // Çift tıklama ile inline düzenleme
+            _approvalGrid.CellDoubleClick += (s, e) =>
             {
                 if (e.RowIndex < 0 || e.ColumnIndex < 0) return;
                 var row = _approvalGrid.Rows[e.RowIndex];
-                if (!int.TryParse(row.Cells["ID"].Value?.ToString(), out int id)) return;
-                string desc = row.Cells["Description"].Value?.ToString() ?? "this component";
+                var colName = _approvalGrid.Columns[e.ColumnIndex].Name;
 
-                if (_approvalGrid.Columns[e.ColumnIndex].Name == "BtnApprove")
+                // Düzenlenebilir sütunlar
+                if (colName == "FekaNo" || colName == "PartNumber" || colName == "Manufacturer" || colName == "Rating" || colName == "Process")
                 {
-                    if (MessageBox.Show($"Approve '{desc}'?", "Approve", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
-                    { 
-                        ComponentRepository.Approve(id); 
-                        RefreshApproval(); // Burada liste yenilenince onaylanan kaybolacak
-                        RefreshApprovalBadge(); 
-                    }
+                    _approvalGrid.BeginEdit(false);
                 }
-                else if (_approvalGrid.Columns[e.ColumnIndex].Name == "BtnDelete")
-                {
-                    if (MessageBox.Show($"Delete '{desc}'?", "Confirm Delete", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
-                    { 
-                        ComponentRepository.Delete(id); 
-                        RefreshApproval(); 
-                        RefreshApprovalBadge(); 
-                    }
-                }
+            };
+
+            // Cell düzenlemesi bittikten sonra kaydet
+            _approvalGrid.CellEndEdit += (s, e) =>
+            {
+                if (e.RowIndex < 0) return;
+                var row = _approvalGrid.Rows[e.RowIndex];
+                if (!int.TryParse(row.Cells["ID"].Value?.ToString(), out int id)) return;
+
+                var component = ComponentRepository.GetAll().FirstOrDefault(c => c.Id == id);
+                if (component == null) return;
+
+                var colName = _approvalGrid.Columns[e.ColumnIndex].Name;
+                var newValue = row.Cells[e.ColumnIndex].Value?.ToString() ?? "";
+
+                // Güncelle
+                if (colName == "FekaNo") component.FekaNo = newValue;
+                else if (colName == "PartNumber") component.PartNumber = newValue;
+                else if (colName == "Manufacturer") component.Manufacturer = newValue;
+                else if (colName == "Rating" && Enum.TryParse<ComponentRating>(newValue, out var rating)) component.Rating = rating;
+                else if (colName == "Process" && Enum.TryParse<ComponentProcess>(newValue, out var process)) component.Process = process;
+
+                // Veritabanına kaydet
+                ComponentRepository.Update(component);
+                
+                // Grid yenilemeyi defer et (event tamamlandıktan sonra çalışacak)
+                this.BeginInvoke(new Action(() => RefreshApproval()));
             };
 
             _pageApproval.Controls.Add(_approvalGrid);
             _pageApproval.Resize += (s, e) =>
             {
                 _approvalGrid.Width=_pageApproval.ClientSize.Width;
-                _approvalGrid.Height=_pageApproval.ClientSize.Height-92;
+                _approvalGrid.Height=_pageApproval.ClientSize.Height-90;
+                btnPanel.Width = _pageApproval.ClientSize.Width;
             };
         }
 
@@ -1661,229 +1727,95 @@ MaximizeBox = false;
             WriteEBomXlsx(filePath, components);
         }
 
-        private static void WriteEBomXlsx(string path, List<Component> data)
+       private static void WriteEBomXlsx(string path, List<Component> data)
+{
+    string templatePath = System.IO.Path.Combine(
+        Application.StartupPath, "Data2", "AR-GE_EE_Birimi_E-BOM_Listesi_Formu.xlsx");
+
+    if (!System.IO.File.Exists(templatePath))
+    {
+        MessageBox.Show("Şablon bulunamadı:\n" + templatePath, "Hata", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        return;
+    }
+
+    try
+    {
+        System.IO.File.Copy(templatePath, path, true);
+
+        using var workbook = new XLWorkbook(path);
+        var ws = workbook.Worksheet("E-BOM");
+
+        // Tüm hyperlinkleri temizle
+        foreach (var hyperlink in ws.Hyperlinks.ToList())
+            ws.Hyperlinks.Delete(hyperlink);
+
+       
+     
+
+        // Veriyi yaz
+        int currentRow = 6;
+        foreach (var item in data)
         {
-            string templatePath = System.IO.Path.Combine(
-                Application.StartupPath, "Data2", "AR-GE_EE_Birimi_E-BOM_Listesi_Formu.xlsx");
+            // Stil kopyala (sadece ilk veri satırından)
+            if (currentRow > 6)
+                CopyRowFormat(ws, 6, currentRow, 2, 13);
 
-            if (!System.IO.File.Exists(templatePath))
+            // Hücreleri sıfırla
+            for (int col = 2; col <= 13; col++)
             {
-                MessageBox.Show("Şablon bulunamadı:\n" + templatePath, "Hata", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
+                ws.Cell(currentRow, col).Style.Font.FontColor = XLColor.Black;
+                ws.Cell(currentRow, col).Style.Font.Underline = XLFontUnderlineValues.None;
             }
 
-            int currentRow = 6;
-            try
-            {
-                // Şablondan orijinal tablo XML'ini oku
-                string originalTableXml = "";
-                string tableEntryName = "";
-                using (var templateZip = System.IO.Compression.ZipFile.OpenRead(templatePath))
-                {
-                    var te = templateZip.Entries.FirstOrDefault(e => e.FullName.StartsWith("xl/tables/"));
-                    if (te != null)
-                    {
-                        tableEntryName = te.FullName;
-                        using (var sr = new System.IO.StreamReader(te.Open()))
-                            originalTableXml = sr.ReadToEnd();
-                    }
-                }
+            // NO kolonu boş (col 2)
+            ws.Cell(currentRow, 2).Value = Blank.Value;
+            ws.Cell(currentRow, 3).Value  = item.FekaNo       ?? "";
+            ws.Cell(currentRow, 4).Value  = item.Category     ?? "";
+            ws.Cell(currentRow, 5).Value  = item.Description  ?? "";
+            ws.Cell(currentRow, 6).Value  = item.Footprint    ?? "";
+            ws.Cell(currentRow, 7).Value  = item.PartNumber   ?? "";
+            ws.Cell(currentRow, 8).Value  = item.Manufacturer ?? "";
+            ws.Cell(currentRow, 9).Value  = item.Rating  == ComponentRating.AECQ ? "AECQ" : "STD";
+            ws.Cell(currentRow, 10).Value = item.Process == ComponentProcess.THT  ? "THT"  : "SMD";
+            // col 11 (Layer), 12 (Quantity), 13 (Designator) boş bırak
 
-                // Tablosuz geçici şablon oluştur
-                string tempTemplate = System.IO.Path.GetTempFileName() + ".xlsx";
-                System.IO.File.Copy(templatePath, tempTemplate, true);
-                using (var zip = System.IO.Compression.ZipFile.Open(tempTemplate, System.IO.Compression.ZipArchiveMode.Update))
-                {
-                    // table1.xml kaldır
-                    zip.Entries.FirstOrDefault(e => e.FullName.StartsWith("xl/tables/"))?.Delete();
-
-                    // [Content_Types].xml'den tablo Override'ını kaldır
-                    var ctEntry = zip.Entries.FirstOrDefault(e => e.FullName == "[Content_Types].xml");
-                    if (ctEntry != null)
-                    {
-                        string ct;
-                        using (var sr = new System.IO.StreamReader(ctEntry.Open())) ct = sr.ReadToEnd();
-                        ct = System.Text.RegularExpressions.Regex.Replace(ct, @"<Override[^>]*tables/table1[^>]*/>", "");
-                        ctEntry.Delete();
-                        var newCt = zip.CreateEntry("[Content_Types].xml");
-                        using (var sw = new System.IO.StreamWriter(newCt.Open())) sw.Write(ct);
-                    }
-
-                    // sheet2.xml'den tableParts kaldır
-                    var wsEntry = zip.Entries.FirstOrDefault(e => e.FullName == "xl/worksheets/sheet2.xml");
-                    if (wsEntry != null)
-                    {
-                        string ws;
-                        using (var sr = new System.IO.StreamReader(wsEntry.Open())) ws = sr.ReadToEnd();
-                        ws = System.Text.RegularExpressions.Regex.Replace(ws, @"<tableParts[^/]*/?>.*?</tableParts>|<tableParts[^/]*/>", "", System.Text.RegularExpressions.RegexOptions.Singleline);
-                        wsEntry.Delete();
-                        var newWs = zip.CreateEntry("xl/worksheets/sheet2.xml");
-                        using (var sw = new System.IO.StreamWriter(newWs.Open())) sw.Write(ws);
-                    }
-
-                    // sheet2.xml.rels'den tablo referansını kaldır
-                    var relsEntry = zip.Entries.FirstOrDefault(e => e.FullName == "xl/worksheets/_rels/sheet2.xml.rels");
-                    if (relsEntry != null)
-                    {
-                        string rels;
-                        using (var sr = new System.IO.StreamReader(relsEntry.Open())) rels = sr.ReadToEnd();
-                        rels = System.Text.RegularExpressions.Regex.Replace(rels, @"<Relationship[^>]*table[^>]*/>", "");
-                        relsEntry.Delete();
-                        var newRels = zip.CreateEntry("xl/worksheets/_rels/sheet2.xml.rels");
-                        using (var sw = new System.IO.StreamWriter(newRels.Open())) sw.Write(rels);
-                    }
-                }
-
-                // Geçici şablonla ClosedXML işlemi
-                using (var workbook = new XLWorkbook(tempTemplate))
-                {
-                    var ws = workbook.Worksheet("E-BOM");
-
-                    foreach (var hyperlink in ws.Hyperlinks.ToList())
-                        ws.Hyperlinks.Delete(hyperlink);
-
-                    foreach (var cell in ws.Range(6, 2, 50, 13).Cells())
-                    {
-                        cell.Style.Font.FontColor = XLColor.Black;
-                        cell.Style.Font.Underline = XLFontUnderlineValues.None;
-                        cell.Value = "";
-                    }
-
-                    int templateRow = 6;
-
-                    foreach (var item in data)
-                    {
-                        if (currentRow > templateRow)
-                        {
-                            CopyRowFormat(ws, templateRow, currentRow, 2, 13);
-                            ws.Cell(currentRow, 2).FormulaA1 = "=ROW()-5";
-                        }
-
-                        for (int col = 2; col <= 13; col++)
-                        {
-                            ws.Cell(currentRow, col).Style.Font.FontColor = XLColor.Black;
-                            ws.Cell(currentRow, col).Style.Font.Underline = XLFontUnderlineValues.None;
-                        }
-
-                        ws.Cell(currentRow, 3).Value  = item.FekaNo       ?? "";
-                        ws.Cell(currentRow, 4).Value  = item.Category     ?? "";
-                        ws.Cell(currentRow, 5).Value  = item.Description  ?? "";
-                        ws.Cell(currentRow, 6).Value  = item.Footprint    ?? "";
-                        ws.Cell(currentRow, 7).Value  = item.PartNumber   ?? "";
-                        ws.Cell(currentRow, 8).Value  = item.Manufacturer ?? "";
-                        ws.Cell(currentRow, 9).Value  = item.Rating  == ComponentRating.AECQ ? "AECQ" : "STD";
-                        ws.Cell(currentRow, 10).Value = item.Process == ComponentProcess.THT  ? "THT"  : "SMD";
-
-                        currentRow++;
-                    }
-
-                    for (int r = 6; r < currentRow; r++)
-                        ws.Row(r).Height = 18;
-
-                    ws.Column(5).Width = 35;
-                    ws.Column(7).Width = 22;
-                    ws.Column(8).Width = 16;
-
-                    workbook.SaveAs(path);
-                }
-
-                System.IO.File.Delete(tempTemplate);
-
-                // Tabloyu güncel ref ile geri ekle
-                if (!string.IsNullOrEmpty(originalTableXml) && !string.IsNullOrEmpty(tableEntryName))
-                {
-                    string newRef = $"B5:M{currentRow - 1}";
-                    string patchedTableXml = System.Text.RegularExpressions.Regex.Replace(
-                        originalTableXml, @"ref=""B\d+:M\d+""", $"ref=\"{newRef}\"");
-
-                    using (var zip = System.IO.Compression.ZipFile.Open(path, System.IO.Compression.ZipArchiveMode.Update))
-                    {
-                        // table1.xml ekle
-                        var newTableEntry = zip.CreateEntry(tableEntryName);
-                        using (var sw = new System.IO.StreamWriter(newTableEntry.Open()))
-                            sw.Write(patchedTableXml);
-
-                        // [Content_Types].xml'e tablo Override ekle
-                        var ctEntry = zip.Entries.FirstOrDefault(e => e.FullName == "[Content_Types].xml");
-                        if (ctEntry != null)
-                        {
-                            string ct;
-                            using (var sr = new System.IO.StreamReader(ctEntry.Open())) ct = sr.ReadToEnd();
-                            if (!ct.Contains("tables/table1"))
-                                ct = ct.Replace("</Types>", "<Override PartName=\"/xl/tables/table1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml\"/></Types>");
-                            ctEntry.Delete();
-                            var newCt = zip.CreateEntry("[Content_Types].xml");
-                            using (var sw = new System.IO.StreamWriter(newCt.Open())) sw.Write(ct);
-                        }
-
-                        // sheet2.xml'e tableParts geri ekle
-                        var wsEntry = zip.Entries.FirstOrDefault(e => e.FullName == "xl/worksheets/sheet2.xml");
-                        if (wsEntry != null)
-                        {
-                            string wsXml;
-                            using (var sr = new System.IO.StreamReader(wsEntry.Open())) wsXml = sr.ReadToEnd();
-                            // ClosedXML boş <x:tableParts count="0"/> yazar, onu dolu olanla değiştir
-                            // x: prefix'li ve prefix'siz her iki versiyonu da handle et
-                            wsXml = System.Text.RegularExpressions.Regex.Replace(
-                                wsXml,
-                                @"<(x:)?tableParts[^/]*/>([\s\S]*?)</(x:)?worksheet>",
-                                m => {
-                                    string prefix = m.Groups[3].Value; // worksheet prefix
-                                    string tp = string.IsNullOrEmpty(prefix) ? "" : "x:";
-                                    return $"<{tp}tableParts count=\"1\"><{tp}tablePart r:id=\"rId9\"/></{tp}tableParts></{prefix}worksheet>";
-                                });
-                            wsEntry.Delete();
-                            var newWs = zip.CreateEntry("xl/worksheets/sheet2.xml");
-                            using (var sw = new System.IO.StreamWriter(newWs.Open())) sw.Write(wsXml);
-                        }
-
-                        // sheet2.xml.rels'e tablo referansı geri ekle
-                        var relsEntry = zip.Entries.FirstOrDefault(e => e.FullName == "xl/worksheets/_rels/sheet2.xml.rels");
-                        if (relsEntry != null)
-                        {
-                            string rels;
-                            using (var sr = new System.IO.StreamReader(relsEntry.Open())) rels = sr.ReadToEnd();
-                            if (!rels.Contains("table"))
-                                rels = rels.Replace("</Relationships>", "<Relationship Id=\"rId9\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/table\" Target=\"../tables/table1.xml\"/></Relationships>");
-                            relsEntry.Delete();
-                            var newRels = zip.CreateEntry("xl/worksheets/_rels/sheet2.xml.rels");
-                            using (var sw = new System.IO.StreamWriter(newRels.Open())) sw.Write(rels);
-                        }
-                        else
-                        {
-                            // _rels dosyası yoksa oluştur
-                            var newRels = zip.CreateEntry("xl/worksheets/_rels/sheet2.xml.rels");
-                            using (var sw = new System.IO.StreamWriter(newRels.Open()))
-                                sw.Write("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?><Relationships xmlns=\"http://schemas.openxmlformats.org/package/2006/relationships\"><Relationship Id=\"rId9\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/table\" Target=\"../tables/table1.xml\"/></Relationships>");
-                        }
-                    }
-                }
-            }
-            catch (Exception ex) { MessageBox.Show("Error: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error); }
+            ws.Row(currentRow).Height = 18;
+            currentRow++;
         }
 
-        private static void CopyRowFormat(IXLWorksheet ws, int srcRow, int dstRow, int c1, int c2)
-        {
-            for (int col = c1; col <= c2; col++)
-            {
-                var src = ws.Cell(srcRow, col);
-                var dst = ws.Cell(dstRow, col);
-                dst.Style.Font.FontName            = src.Style.Font.FontName;
-                dst.Style.Font.FontSize            = src.Style.Font.FontSize;
-                dst.Style.Font.Bold                = src.Style.Font.Bold;
-                dst.Style.Alignment.Horizontal     = src.Style.Alignment.Horizontal;
-                dst.Style.Alignment.Vertical       = src.Style.Alignment.Vertical;
-                dst.Style.Border.LeftBorder        = src.Style.Border.LeftBorder;
-                dst.Style.Border.RightBorder       = src.Style.Border.RightBorder;
-                dst.Style.Border.TopBorder         = src.Style.Border.TopBorder;
-                dst.Style.Border.BottomBorder      = src.Style.Border.BottomBorder;
-                dst.Style.Border.LeftBorderColor   = src.Style.Border.LeftBorderColor;
-                dst.Style.Border.RightBorderColor  = src.Style.Border.RightBorderColor;
-                dst.Style.Border.TopBorderColor    = src.Style.Border.TopBorderColor;
-                dst.Style.Border.BottomBorderColor = src.Style.Border.BottomBorderColor;
-                dst.Style.Fill.BackgroundColor     = src.Style.Fill.BackgroundColor;
-            }
-        }
+        ws.Column(5).Width = 35;
+        ws.Column(7).Width = 22;
+        ws.Column(8).Width = 16;
+
+        workbook.Save();
+    }
+    catch (Exception ex)
+    {
+        MessageBox.Show("Error: " + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+    }
+}
+private static void CopyRowFormat(IXLWorksheet ws, int srcRow, int dstRow, int c1, int c2)
+{
+    for (int col = c1; col <= c2; col++)
+    {
+        var src = ws.Cell(srcRow, col);
+        var dst = ws.Cell(dstRow, col);
+        dst.Style.Font.FontName            = src.Style.Font.FontName;
+        dst.Style.Font.FontSize            = src.Style.Font.FontSize;
+        dst.Style.Font.Bold                = src.Style.Font.Bold;
+        dst.Style.Alignment.Horizontal     = src.Style.Alignment.Horizontal;
+        dst.Style.Alignment.Vertical       = src.Style.Alignment.Vertical;
+        dst.Style.Border.LeftBorder        = src.Style.Border.LeftBorder;
+        dst.Style.Border.RightBorder       = src.Style.Border.RightBorder;
+        dst.Style.Border.TopBorder         = src.Style.Border.TopBorder;
+        dst.Style.Border.BottomBorder      = src.Style.Border.BottomBorder;
+        dst.Style.Border.LeftBorderColor   = src.Style.Border.LeftBorderColor;
+        dst.Style.Border.RightBorderColor  = src.Style.Border.RightBorderColor;
+        dst.Style.Border.TopBorderColor    = src.Style.Border.TopBorderColor;
+        dst.Style.Border.BottomBorderColor = src.Style.Border.BottomBorderColor;
+        dst.Style.Fill.BackgroundColor     = src.Style.Fill.BackgroundColor;
+    }
+}
 
         // ══════════════════════════════════════════════════════════════════
         //  CATEGORY MANAGER

@@ -22,4 +22,9 @@
     <Compile Remove="obj\**\*.cs" />
     <Compile Remove="bin\**\*.cs" />
   </ItemGroup>
+  <ItemGroup>
+  <Content Include="Data2\**">
+    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+  </Content>
+</ItemGroup>
 </Project>

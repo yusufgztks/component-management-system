@@ -198,13 +198,15 @@ namespace CMS.Data
             var q = query?.ToLower() ?? "";
             return _components.Where(c =>
             {
+                // Katalogda sadece onaylı componentler görünsün
+                if (c.Status != ComponentStatus.Approved) return false;
                 if (!string.IsNullOrEmpty(category) && c.Category != category) return false;
                 if (!string.IsNullOrEmpty(rating) && c.Rating.ToString() != rating) return false;
                 if (!string.IsNullOrEmpty(process) && c.Process.ToString() != process) return false;
                 if (!string.IsNullOrEmpty(manufacturer) && c.Manufacturer != manufacturer) return false;
                 if (!string.IsNullOrEmpty(q))
                 {
-                    var text = $"{c.Description} {c.PartNumber} {c.Manufacturer} {c.Category} {c.Footprint}".ToLower();
+                    var text = $"{c.FekaNo} {c.Description} {c.PartNumber} {c.Manufacturer} {c.Category} {c.Footprint}".ToLower();
                     if (!text.Contains(q)) return false;
                 }
                 return true;

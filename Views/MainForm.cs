@@ -1327,12 +1327,12 @@ MaximizeBox = false;
             var btnApproveAll = new ModernButton { Text="Approve All", Style=ModernButton.BtnStyle.Success, Width=120, Height=32, Left=0, Top=0, Parent=btnPanel };
             btnApproveAll.Click += (s, e) =>
             {
-                var pending = ComponentRepository.GetAll().Where(c => c.IsCustom && c.Status == ComponentStatus.Pending).ToList();
+                var pending = ComponentRepository.GetAll().Where(c => c.Status == ComponentStatus.Pending).ToList();
                 if (pending.Count == 0) { MessageBox.Show("No components pending approval.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information); return; }
                 if (MessageBox.Show($"Are you sure you want to approve {pending.Count} component(s)?", "Approve All", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
                 {
                     foreach (var c in pending) ComponentRepository.Approve(c.Id);
-                    RefreshApproval(); RefreshApprovalBadge();
+                    RefreshApproval(); RefreshApprovalBadge(); RefreshCatalog(); RefreshDashboard();
                     MessageBox.Show($"{pending.Count} component(s) approved and moved to catalog.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
             };
@@ -1371,7 +1371,7 @@ MaximizeBox = false;
                             approvedCount++;
                         }
                     }
-                    RefreshApproval(); RefreshApprovalBadge();
+                    RefreshApproval(); RefreshApprovalBadge(); RefreshCatalog(); RefreshDashboard();
                     MessageBox.Show($"{approvedCount} component(s) approved and moved to catalog.", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
             };
@@ -1475,7 +1475,7 @@ MaximizeBox = false;
         {
             // Only pending items
             var pendingOnly = ComponentRepository.GetAll()
-                .Where(c => c.IsCustom && c.Status == ComponentStatus.Pending)
+                .Where(c => c.Status == ComponentStatus.Pending)
                 .ToList();
 
             var table = new System.Data.DataTable();
